@@ -19,7 +19,13 @@ find_package(catkin REQUIRED COMPONENTS
 ## The catkin_package macro generates cmake config files for your package
 ## Declare things to be passed to dependent projects
 catkin_package(
-  CATKIN_DEPENDS joint_state_publisher joint_state_publisher_gui robot_state_publisher roslaunch rviz xacro
+  CATKIN_DEPENDS 
+  joint_state_publisher 
+  joint_state_publisher_gui 
+  robot_state_publisher 
+  roslaunch 
+  rviz 
+  xacro
 )
 
 ###########

@@ -1,0 +1,10 @@
+<launch>
+    <arg name="motor_configs"                     default="$(find px100_dynamixel_interface)/config/motor_configs_template.yaml"/>
+    <arg name="mode_configs"                      default="$(find px100_dynamixel_interface)/config/mode_configs_template.yaml"/>
+
+    <node name="cybot" pkg="px100_dynamixel_interface" type="CyRobotCore.py" 
+    output="screen">
+        <param name="motor_configs"                   value="$(arg motor_configs)"/>
+        <param name="mode_configs"                    value="$(arg mode_configs)"/>
+    </node>
+</launch>

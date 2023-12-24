@@ -1,16 +1,17 @@
 <?xml version="1.0"?>
 <package format="2">
   <name>px100_gazebo</name>
-  <version>0.0.0</version>
+  <version>0.0.1</version>
   <description>The px100_gazebo package</description>
-  <maintainer email="trsupport@trossenrobotics.com">Solomon Wiznitzer</maintainer>
+  <maintainer email="ankurkhandelwal08027@gmail.com">Ankur Khandelwal</maintainer>
   <license>BSD</license>
-  <!-- <url type="website">http://wiki.ros.org/px100_gazebo</url> -->
-  <author email="solomon@trossenrobotics.com">Solomon Wiznitzer</author>
+  <author email="ankurkhandelwal08027@gmail.com">Ankur Khandelwal</author>
 
   <!-- The *depend tags are used to specify dependencies -->
   <!-- Dependencies can be catkin packages or system dependencies -->
   <buildtool_depend>catkin</buildtool_depend>
+
+  <!-- add compile time dependencies for px100_gazeboo package-->
   <build_depend>controller_manager</build_depend>
   <build_depend>effort_controllers</build_depend>
   <build_depend>gazebo_ros</build_depend>
@@ -18,6 +19,7 @@
   <build_depend>px100_description</build_depend>
   <build_depend>joint_state_controller</build_depend>
   <build_depend>joint_trajectory_controller</build_depend>
+
   <build_export_depend>controller_manager</build_export_depend>
   <build_export_depend>effort_controllers</build_export_depend>
   <build_export_depend>gazebo_ros</build_export_depend>
@@ -25,6 +27,8 @@
   <build_export_depend>px100_description</build_export_depend>
   <build_export_depend>joint_state_controller</build_export_depend>
   <build_export_depend>joint_trajectory_controller</build_export_depend>
+
+  <!-- runtime dependencies for px100_gazebo package -->
   <exec_depend>controller_manager</exec_depend>
   <exec_depend>effort_controllers</exec_depend>
   <exec_depend>gazebo_ros</exec_depend>
@@ -33,8 +37,6 @@
   <exec_depend>joint_state_controller</exec_depend>
   <exec_depend>joint_trajectory_controller</exec_depend>
 
-  <!-- The export tag contains other, unspecified, tags -->
   <export>
-    <!-- Other tools can request additional information be placed here -->
   </export>
 </package>

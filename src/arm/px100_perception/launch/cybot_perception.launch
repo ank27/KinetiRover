@@ -1,0 +1,22 @@
+<launch>
+    <arg name="filters" default="pointcloud" />
+    <arg name="cloud_topic" default="/camera/depth/color/points" />
+
+    <node
+        name="perception_pipeline"
+        pkg="px100_perception"
+        type="perception_pipeline"
+        output="screen">
+        <param name="cloud_topic" value="$(arg cloud_topic)"/>
+    </node>
+    
+    <node
+        name="object_detection"
+        pkg="px100_perception"
+        type="object_detection"
+        output="screen">
+        <param name="cloud_topic" value="$(arg cloud_topic)"/>
+    </node>
+
+
+</launch>

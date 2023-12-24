@@ -1,0 +1,11 @@
+moveit_setup_assistant_config:
+  URDF:
+    package: px100_description
+    relative_path: urdf/px100.urdf.xacro
+    xacro_args: ""
+  SRDF:
+    relative_path: config/px100.srdf
+  CONFIG:
+    author_name: Ankur Khandelwal
+    author_email: ankurkhandelwal08027@gmail.com
+    generated_timestamp: 1703395168

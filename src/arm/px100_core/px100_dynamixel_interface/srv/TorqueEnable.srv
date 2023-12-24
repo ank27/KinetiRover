@@ -1,0 +1,6 @@
+# Torque on/off
+
+string cmd_type
+string name
+bool enable
+---
