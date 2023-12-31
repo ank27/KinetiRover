@@ -3,16 +3,17 @@
   <arg name="robot_model"                       default="px100"/>
   <arg name="robot_name"                        default="$(arg robot_model)"/>
   <arg name="base_link_frame"                   default="base_link"/>
+  <arg name="show_ar_tag"                       default="false"/>
   <arg name="show_gripper_bar"                  default="true"/>
   <arg name="show_gripper_fingers"              default="true"/>
   <arg name="use_world_frame"                   default="true"/>
-  <arg name="use_rviz"                          default="true"/>
-  <arg name="world_name"                        default="$(find px100_gazebo)/worlds/xsarm_gazebo.world"/>
+  <arg name="external_urdf_loc"                 default=""/>
+  <arg name="use_rviz"                          default="false"/>
+  <arg name="world_name"                        default="$(find px100_gazebo)/worlds/px100_gazebo.world"/>
   <arg name="gui"                               default="true"/>
-  <arg name="debug"                             default="true"/>
+  <arg name="debug"                             default="false"/>
   <arg name="paused"                            default="true"/>
   <arg name="recording"                         default="false"/>
-  <arg name="use_joint_pub_gui"                 default="false"/>
   <arg name="use_sim_time"                      default="true"/>
   <arg name="use_position_controllers"          default="false"/>
   <arg name="use_trajectory_controllers"        default="false"/>
@@ -29,7 +30,6 @@
     <arg name="use_sim_time"                      value="$(arg use_sim_time)"/>
   </include>
 
-  <!-- trajectory controller is used with moveit, contains info of arm_controller and gripper_controller. -->
   <group if="$(arg use_trajectory_controllers)">
 
     <rosparam file="$(find px100_gazebo)/config/trajectory_controllers/$(arg robot_model)_trajectory_controllers.yaml" command="load" ns="$(arg robot_name)"/>
@@ -47,7 +47,7 @@
 
   <group if="$(arg use_position_controllers)">
 
-    <rosparam file="$(find px100_gazebo)/config/position_controllers/$(arg robot_model)_position_controllers.yaml" command="load" ns="$(arg robot_name)"/>
+    <rosparam file="$(find px100_gazebo)/config/position_controllers/px100_position_controllers.yaml" command="load" ns="$(arg robot_name)"/>
 
     <node
       name="controller_spawner"
@@ -65,11 +65,12 @@
     <arg name="robot_model"                       value="$(arg robot_model)"/>
     <arg name="robot_name"                        value="$(arg robot_name)"/>
     <arg name="base_link_frame"                   value="$(arg base_link_frame)"/>
+    <arg name="show_ar_tag"                       value="$(arg show_ar_tag)"/>
     <arg name="show_gripper_bar"                  value="$(arg show_gripper_bar)"/>
     <arg name="show_gripper_fingers"              value="$(arg show_gripper_fingers)"/>
-    <arg name="use_joint_pub_gui"                 value="$(arg use_joint_pub_gui)"/>
     <arg name="load_gazebo_configs"               value="true"/>
     <arg name="use_world_frame"                   value="$(arg use_world_frame)"/>
+    <arg name="external_urdf_loc"                 value="$(arg external_urdf_loc)"/>
     <arg name="use_rviz"                          value="$(arg use_rviz)"/>
   </include>
 

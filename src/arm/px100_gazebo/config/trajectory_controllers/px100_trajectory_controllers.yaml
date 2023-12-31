@@ -4,6 +4,37 @@ joint_state_controller:
   type: joint_state_controller/JointStateController
   publish_rate: 100
 
+# ROS_CONTROL CONTROLLERS
+# Effort controller means the joints accepts effort(torque/force) values, and we send command to
+# effort interface of ros_control framework.
+# Effort controller includes several controller
+#     - joint_effort_controller
+#     - joint_position_controller
+#     - joint_velocity_controller
+#     - joint_trajectory_controller
+#
+# position controlller: joint accept position values and we send commands to position interface
+#     - joint_position_controller - accept only position
+#     - joint_trajectory_controller
+#
+# velocity controllers: send command to velocity interface
+#     - joint_velocity_controller
+# 
+# joint_state_controller : when load, this will read all the joint states and publish it to topic
+# /joint_states.
+#
+# Once controllers do their job, the output is send to hardware interface 
+# the hardware interface is abstract software representation of actual robot
+# it acts like intermediatery between controllers and actual robot
+#
+# hardware interfaces for controlling joint:
+#     - EffortJointInterface
+#     - VelocityJointInterface
+#     - PositionJointInterface
+#
+# In urdf, transmissions tags indicates hardware interface for the robot.
+#
+#
 arm_controller:
   type: effort_controllers/JointTrajectoryController
   joints:

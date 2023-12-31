@@ -1,6 +1,12 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://ros.org/wiki/xacro">
 
+<!-- gazebo ros control plugin allows communication to simulated hardware
+  and we don't need to write robot hardwareInterface for that.
+  
+  for actual robot, we need to write our own hardware interface 
+  that controls the hardware actuators. 
+ -->
   <gazebo>
     <plugin name="gazebo_ros_control" filename="libgazebo_ros_control.so">
       <robotSimType>gazebo_ros_control/DefaultRobotHWSim</robotSimType>

@@ -2,7 +2,6 @@
 
 ## Overview
 
-This package contains the config and launch files to run px100 manipulator using moveit. These files are generated using moveit_setup_assistent, additionally `px100_moveit.launch` file added to run the gazebo, rviz with included moveit setup assistent.
+This package contains the necessary config files for px100 arm working with MoveIt. The MoveIt Setup Assistant wizard is used to generate this package. 
 
-## Note
-When running gazebo simulation, make sure to unpause physics engine to publish the transformation data using `rosservice call /gazebo/unapause_physics`
+This package makes use of the FollowJointTrajectory interface which seems to work pretty well in both Gazebo and on the physical robot. A 'master' launch file [px100_moveit] was written to allow a user to choose whether to have MoveIt work with the simulated version, the physical robot hardware, or a MoveIt generated fake robot.

@@ -8,3 +8,7 @@ srv_gen/
 
 build_isolated/
 devel_isolated/
+
+.idea/
+.vscode/
+.catkin_workspace
