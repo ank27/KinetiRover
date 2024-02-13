@@ -61,6 +61,7 @@
     <arg name="dof"                               value="$(arg dof)"/>
     <arg name="fake_execution"                    value="$(arg use_fake)"/>
     <arg name="publish_monitored_planning_scene"  value="true" />
+    <arg name="debug"                             value="true" />
   </include>
 
   <include if="$(arg use_moveit_rviz)" file="$(find px100_moveit)/launch/moveit_rviz.launch" ns="$(arg robot_name)">
