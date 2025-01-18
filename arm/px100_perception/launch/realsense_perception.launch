@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- Include the RealSense camera launch file -->
+    <include file="$(find realsense2_camera)/launch/rs_camera.launch">
+        <arg name="align_depth" value="true"/>
+        <arg name="filters" value="pointcloud"/>
+        <arg name="enable_color" value="true"/>
+        <arg name="enable_depth" value="true"/>
+        <arg name="enable_infra1" value="false"/>
+        <arg name="enable_infra2" value="false"/>
+    </include>
+
+    <!-- Launch perception node -->
+    <node name="realsense_perception_node" pkg="px100_perception" type="realsense_perception.py" output="screen">
+        <param name="camera_frame" value="camera_color_optical_frame"/>
+        <param name="base_frame" value="base_link"/>
+        <rosparam command="load" file="$(find px100_perception)/config/perception_params.yaml"/>
+    </node>
+</launch>
