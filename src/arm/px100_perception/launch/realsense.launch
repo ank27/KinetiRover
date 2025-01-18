@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- Launch RealSense camera node -->
+    <include file="$(find realsense2_camera)/launch/rs_camera.launch">
+        <arg name="align_depth" value="true"/>
+        <arg name="filters" value="pointcloud"/>
+        <arg name="color_width" value="640"/>
+        <arg name="color_height" value="480"/>
+        <arg name="color_fps" value="30"/>
+        <arg name="depth_width" value="640"/>
+        <arg name="depth_height" value="480"/>
+        <arg name="depth_fps" value="30"/>
+    </include>
+
+    <!-- Launch point cloud processing node -->
+    <node pkg="px100_perception" type="point_cloud_processor.py" name="point_cloud_processor" output="screen">
+        <param name="base_frame" value="base_link"/>
+        <param name="camera_frame" value="camera_color_optical_frame"/>
+        <param name="min_height" value="0.01"/>
+        <param name="max_height" value="0.5"/>
+        <param name="voxel_size" value="0.01"/>
+    </node>
+</launch>
