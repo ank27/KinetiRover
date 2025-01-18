@@ -1,0 +1,10 @@
+controller_list:
+  - name: fake_px100_arm_controller
+    joints:
+      - waist
+      - shoulder
+      - elbow
+      - wrist_angle
+  - name: fake_px100_gripper_controller
+    joints:
+      - left_finger

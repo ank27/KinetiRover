@@ -1,0 +1,16 @@
+# Get Robot info
+
+string cmd_type
+string name
+---
+string mode
+string profile_type
+string[] joint_names
+int16[] joint_ids
+float32[] joint_lower_limits
+float32[] joint_upper_limits
+float32[] joint_velocity_limits
+float32[] joint_sleep_positions
+int16[] joint_state_indices
+int16 num_joints
+string[] name
