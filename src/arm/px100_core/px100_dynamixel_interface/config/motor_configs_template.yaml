@@ -1,0 +1,111 @@
+# Config file to be used by mr_kientik_dxl_interface.
+port: /dev/ttyDXL                                                               # Optional; specifies the USB port that connects to the U2D2; defaults to '/dev/ttyDXL'
+
+joint_order: [waist, shoulder, elbow, wrist_angle, wrist_rotate, gripper]       # Defines the order in which the joints will appear in a JointState message; joint names must match those in the URDF (if present)
+sleep_positions: [0, -1.85, 1.55, 0, -0.8, 0, 0]                               # Optional; specified joint positions that define a 'rest' pose where it is safe to torque off the robot; defaults to 0 for each joint
+
+joint_state_publisher:                                                          # Joint State Publisher Settings...
+  update_rate: 100                                                              # Optional; rate at which the motor states are sampled (and potentially published) in Hz; defaults to '100'
+  publish_states: true                                                          # Optional; boolean that either enables or disables the Publisher; defaults to 'true'
+  topic_name: joint_states                                                      # Optional; desired JointState topic name; defaults to 'joint_states'
+
+groups:                                                                         # Optional; defines an unlimited number of joint groups in the robot; custom 'group' names can be used.
+  arm: [waist, shoulder, elbow, wrist_angle, wrist_rotate]                      # Optional; groups can contain overlapping joints but those joints will retain the operating mode of the latter group.
+                                                                                # Note that 'all' is a special group name that contains all the joints in the 'joint_order' sequence.
+grippers:                                                                       # Optional; defines an unlimited number of PX100 grippers; custom 'gripper' names can be used.
+  gripper:                                                                      # Example gripper name
+    horn_radius: 0.022                                                          # Optional; length in meters from the middle of the gripper servo horn to its edge; defaults to '0.014'
+    arm_length: 0.036                                                           # Optional; length in meters from the end of the servo horn to a finger; defaults to '0.024'
+    left_finger: left_finger                                                    # Optional; name of the 'left_finger' joint; this must match the name in the URDF (if present); defaults to 'left_finger'
+    right_finger: right_finger                                                  # Optional; name of the 'right_finger' joint; this must match the name in the URDF (if present); defaults to 'right_finger'
+
+shadows:                                                                        # Optional; list of any 'master' motors and all of its shadows (usually 1, but could be unlimited)
+  shoulder:
+    shadow_list: [shoulder_shadow]
+    calibrate: true                                                             # Optional; set to true if the master and shadow servos make up a single joint and the shadows should be calibrated to read the exact same value as the master
+  elbow:
+    shadow_list: [elbow_shadow]
+    calibrate: true
+
+sisters:                                                                        # Optional; list of any '2in1' motors and their corresponding 'sister'; order is irrelevant
+
+motors:                                                                         # List of all motors and the default values that should be written to the EEPROM registers; Note that any EEPROM register can be added;
+  waist:
+    ID: 1
+    Baud_Rate: 3
+    Return_Delay_Time: 0
+    Drive_Mode: 0
+    Velocity_Limit: 131
+    Min_Position_Limit: 0
+    Max_Position_Limit: 4095
+    Secondary_ID: 255
+
+  shoulder:
+    ID: 2
+    Baud_Rate: 3
+    Return_Delay_Time: 0
+    Drive_Mode: 1
+    Velocity_Limit: 131
+    Min_Position_Limit: 841
+    Max_Position_Limit: 3196
+    Secondary_ID: 255
+
+  shoulder_shadow:
+    ID: 3
+    Baud_Rate: 3
+    Return_Delay_Time: 0
+    Drive_Mode: 0
+    Velocity_Limit: 131
+    Min_Position_Limit: 841
+    Max_Position_Limit: 3196
+    Secondary_ID: 2
+
+  elbow:
+    ID: 4
+    Baud_Rate: 3
+    Return_Delay_Time: 0
+    Drive_Mode: 0
+    Velocity_Limit: 131
+    Min_Position_Limit: 1002
+    Max_Position_Limit: 3196
+    Secondary_ID: 255
+
+  elbow_shadow:
+    ID: 5
+    Baud_Rate: 3
+    Return_Delay_Time: 0
+    Drive_Mode: 1
+    Velocity_Limit: 131
+    Min_Position_Limit: 1002
+    Max_Position_Limit: 3196
+    Secondary_ID: 4
+
+  wrist_angle:
+    ID: 6
+    Baud_Rate: 3
+    Return_Delay_Time: 0
+    Drive_Mode: 0
+    Velocity_Limit: 131
+    Min_Position_Limit: 570
+    Max_Position_Limit: 3264
+    Secondary_ID: 255
+
+  wrist_rotate:
+    ID: 7
+    Baud_Rate: 3
+    Return_Delay_Time: 0
+    Drive_Mode: 0
+    Velocity_Limit: 131
+    Min_Position_Limit: 0
+    Max_Position_Limit: 4095
+    Secondary_ID: 255
+
+  gripper:
+    ID: 8
+    Baud_Rate: 3
+    Return_Delay_Time: 0
+    Drive_Mode: 0
+    Velocity_Limit: 131
+    Min_Position_Limit: 0
+    Max_Position_Limit: 4095
+    Secondary_ID: 255
