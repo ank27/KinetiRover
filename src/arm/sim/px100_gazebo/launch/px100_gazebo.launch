@@ -30,6 +30,7 @@
     <arg name="use_sim_time"                      value="$(arg use_sim_time)"/>
   </include>
 
+<!-- trajector controller is used with moveit. since moveit sends data on topic trajectory_controller -->
   <group if="$(arg use_trajectory_controllers)">
 
     <rosparam file="$(find px100_gazebo)/config/trajectory_controllers/$(arg robot_model)_trajectory_controllers.yaml" command="load" ns="$(arg robot_name)"/>
@@ -45,6 +46,9 @@
 
   </group>
 
+<!-- position controller is used directly from gazebo or terminal.
+  this is used when we want to control each joints separately for test mostly
+ -->
   <group if="$(arg use_position_controllers)">
 
     <rosparam file="$(find px100_gazebo)/config/position_controllers/px100_position_controllers.yaml" command="load" ns="$(arg robot_name)"/>
