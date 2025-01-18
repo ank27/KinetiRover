@@ -1,4 +1,4 @@
-# MR Kinetik
+# KinetiRover
 
 This repository contains the codebase for a robotic manipulator system based on the [PX100 robot from Trossen Robotics](https://docs.trossenrobotics.com/interbotix_xsarms_docs/specifications/px100.html). The system integrates both simulation and real hardware capabilities using ROS (Robot Operating System).
 
