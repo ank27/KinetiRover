@@ -1,0 +1,14 @@
+# RealSense Perception Parameters
+
+# Camera parameters
+min_depth: 0.1  # minimum depth in meters
+max_depth: 2.0  # maximum depth in meters
+
+# Image processing parameters
+gaussian_kernel_size: 5
+adaptive_block_size: 11
+adaptive_c: 2
+
+# Object detection parameters
+min_contour_area: 1000  # minimum contour area in pixels
+max_contour_area: 50000  # maximum contour area in pixels
