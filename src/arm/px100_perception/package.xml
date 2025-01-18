@@ -1,10 +1,10 @@
 <?xml version="1.0"?>
 <package format="2">
   <name>px100_perception</name>
-  <version>0.0.0</version>
+  <version>0.0.1</version>
   <description>Perception package for KinetiRover's PX100 manipulator</description>
   <maintainer email="ankurkhandelwal08027@gmail.com">Ankur Khandelwal</maintainer>
-  <license>TODO</license>
+  <license>BSD</license>
   <!-- Rest of package.xml content -->
   <!-- Url tags are optional, but multiple are allowed, one per tag -->
   <!-- Optional attribute type can be: website, bugtracker, or repository -->
