@@ -1,0 +1,14 @@
+devel/
+logs/
+build/
+bin/
+lib/
+msg_gen/
+srv_gen/
+
+build_isolated/
+devel_isolated/
+
+.idea/
+.vscode/
+.catkin_workspace

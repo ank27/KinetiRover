@@ -1,4 +1,5 @@
 # PX100 Gazebo
+This package contains the necessary configuration and launch files for simulating the PX100 robotic manipulator in the Gazebo physics simulator.
 
 ## Launch Commands
 
@@ -19,4 +20,3 @@ roslaunch px100_gazebo px100_control.launch
 - `use_sim_time`: Use simulation time (default: true)
 - `gui`: Launch Gazebo GUI (default: true)
 
-[Rest of previous content...]

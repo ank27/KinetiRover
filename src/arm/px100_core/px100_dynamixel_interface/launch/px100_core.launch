@@ -1,0 +1,21 @@
+<launch>
+    <arg name="usb_port"                          default="/dev/ttyUSB0" />
+    <arg name="dxl_baud_rate"                     default="1000000" />
+    <arg name="robot_model"                       default="px100"/>
+    <arg name="robot_name"                        default="$(arg robot_model)"/>
+    <arg name="dof"                               default="4" />
+    <arg name="motor_configs"                     default="$(find px100_dynamixel_interface)/config/motor_configs_template.yaml"/>
+    <arg name="mode_configs"                      default="$(find px100_dynamixel_interface)/config/mode_configs_template.yaml"/>
+    <arg name="load_configs"                      default="true"/>
+
+  <node
+    name="mr_kinetik_dxl_interface"
+    pkg="px100_dynamixel_interface"
+    output="screen"
+    type="mr_kinetik_dxl_interface"
+    ns="$(arg robot_name)">
+    <param name="motor_configs"                   value="$(arg motor_configs)"/>
+    <param name="mode_configs"                    value="$(arg mode_configs)"/>
+    <param name="load_configs"                    value="$(arg load_configs)"/>
+  </node>
+</launch>

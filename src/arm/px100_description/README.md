@@ -1,4 +1,5 @@
 # PX100 Description
+This package contains the URDF (Unified Robot Description Format) models and mesh files for the PX100 robotic manipulator.
 
 ## Launch Commands
 
@@ -17,5 +18,3 @@ roslaunch px100_description upload.launch
 ### Parameters
 - `gui`: Launch with joint_state_publisher_gui (default: true)
 - `rviz`: Launch with RViz (default: true)
-
-[Rest of previous content...]

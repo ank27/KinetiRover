@@ -1,0 +1,9 @@
+[submodule "realsense-ros"]
+	path = src/vendor/realsense-ros
+	url = https://github.com/IntelRealSense/realsense-ros.git
+	branch = ros1-legacy
+
+[submodule "dynamixel-workbench"]
+	path = src/vendor/dynamixel-workbench
+	url = https://github.com/ROBOTIS-GIT/dynamixel-workbench.git
+	branch = noetic-devel

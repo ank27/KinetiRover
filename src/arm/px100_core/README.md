@@ -1,4 +1,5 @@
 # PX100 Core
+This package provides the core functionality for controlling the PX100 robotic manipulator, including hardware interfaces and basic control algorithms.
 
 ## Launch Commands
 
@@ -18,5 +19,3 @@ roslaunch px100_core px100_control.launch port:=/dev/ttyUSB0
 - `port`: Dynamixel USB port (default: /dev/ttyUSB0)
 - `baud`: Baud rate (default: 1000000)
 - `use_fake`: Use fake controllers for testing (default: false)
-
-[Rest of previous content...]

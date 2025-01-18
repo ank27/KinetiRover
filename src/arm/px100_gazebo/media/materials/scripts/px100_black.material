@@ -1,0 +1,14 @@
+material Custom/Px100
+{
+   technique
+   {
+      pass
+      {
+         texture_unit
+         {
+          texture px100_black.png
+          scale 1 1
+         }
+      }
+   }
+}

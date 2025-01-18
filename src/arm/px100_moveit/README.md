@@ -1,4 +1,5 @@
 # PX100 MoveIt
+This package contains the MoveIt configuration for the PX100 robotic manipulator. It was initially generated using the MoveIt Setup Assistant and customized for optimal performance.
 
 ## Launch Commands
 
@@ -18,5 +19,3 @@ roslaunch px100_moveit planning_context.launch
 - `use_rviz`: Launch with RViz (default: true)
 - `pipeline`: Planning pipeline to use (default: ompl)
 - `debug`: Launch in debug mode (default: false)
-
-[Rest of previous content...]
