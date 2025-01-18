@@ -1,12 +1,12 @@
-<package>
-
+<?xml version="1.0"?>
+<package format="2">
   <name>px100_moveit</name>
-  <version>0.0.1</version>
+  <version>0.0.0</version>
   <description>
      An automatically generated package with all the configuration and launch files for px100 with the MoveIt! Motion Planning Framework
   </description>
-  <author email="ankurkhandelwal08027@gmail.com">Ankur Khandelwal</author>
   <maintainer email="ankurkhandelwal08027@gmail.com">Ankur Khandelwal</maintainer>
+  <!-- Rest of package.xml content -->
   <license>BSD</license>
 
   <buildtool_depend>catkin</buildtool_depend>

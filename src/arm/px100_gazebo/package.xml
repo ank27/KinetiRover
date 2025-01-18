@@ -1,10 +1,11 @@
 <?xml version="1.0"?>
 <package format="2">
   <name>px100_gazebo</name>
-  <version>0.0.1</version>
-  <description>The px100_gazebo package</description>
+  <version>0.0.0</version>
+  <description>Gazebo simulation package for KinetiRover's PX100 manipulator</description>
   <maintainer email="ankurkhandelwal08027@gmail.com">Ankur Khandelwal</maintainer>
-  <license>BSD</license>
+  <license>TODO</license>
+  <!-- Rest of package.xml content -->
   <author email="ankurkhandelwal08027@gmail.com">Ankur Khandelwal</author>
 
   <!-- The *depend tags are used to specify dependencies -->
