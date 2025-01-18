@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>px100_gazebo</name>
+  <version>0.0.0</version>
+  <description>Gazebo simulation package for KinetiRover's PX100 manipulator</description>
+  <maintainer email="your@email.com">Your Name</maintainer>
+  <license>TODO</license>
+  <!-- Rest of package.xml content -->
+</package>
