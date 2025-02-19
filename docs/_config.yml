@@ -1,0 +1,9 @@
+title: KinetiRover Documentation
+description: Documentation for the KinetiRover robotics project
+theme: jekyll-theme-cayman
+
+markdown: kramdown
+
+exclude:
+  - Gemfile
+  - Gemfile.lock
