@@ -1,151 +1,84 @@
-# KinetiRover Project Setup Tutorial
+# KinetiRover Project Documentation
 
-Welcome to the KinetiRover project documentation! This guide will walk you through setting up your development environment and understanding the key components of our robotic system.
+Welcome to the KinetiRover documentation! This series of tutorials will guide you through setting up and working with the KinetiRover robotic system, which uses the PX100 robotic arm from Interbotix.
 
-## Hardware Overview
+## Tutorial Series
 
-The KinetiRover project uses the PincherX-100 (PX100) robotic arm from Interbotix. This is a 4-DOF manipulator with the following specifications:
+1. [Getting Started: Basic Setup](tutorials/getting-started.md)
+   - Ubuntu 20.04 setup
+   - ROS Noetic installation
+   - Workspace configuration
+   - Dependencies installation
+
+2. [PX100 Robot Description](tutorials/robot-description.md)
+   - Understanding URDF structure
+   - Robot model configuration
+   - Joint limits and specifications
+   - Testing robot visualization
+
+3. [Gazebo Simulation](tutorials/gazebo-simulation.md)
+   - Setting up Gazebo environment
+   - Loading robot in simulator
+   - Basic movement testing
+   - Joint control interface
+
+4. [RealSense Integration](tutorials/realsense-setup.md)
+   - RealSense D435 hardware setup
+   - Camera drivers installation
+   - Point cloud visualization
+   - Camera calibration
+
+5. [Perception Pipeline](tutorials/perception-pipeline.md)
+   - Point cloud processing
+   - Object detection setup
+   - Segmentation techniques
+   - Workspace monitoring
+
+6. [MoveIt Integration](tutorials/moveit-setup.md)
+   - MoveIt configuration
+   - Motion planning
+   - Trajectory execution
+   - Pick and place tasks
+
+## Hardware Specifications
+
+The KinetiRover uses the PX100 robotic arm with the following specifications:
 
 - **Degrees of Freedom**: 4
 - **Maximum Reach**: 300mm
-- **Total Span**: 600mm
-- **Working Payload**: 50g (recommended at 50% arm extension)
-- **Repeatability**: 5mm
-- **Accuracy**: 8mm
+- **Working Payload**: 50g
 - **Total Servos**: 5 (4 for arm joints, 1 for gripper)
 
-### Key Components
+### System Components
+
 1. **PX100 Robotic Arm**
-   - Uses DYNAMIXEL X-Series Smart Servo Motors (XL430-W250)
-   - Features high-resolution positioning (4096 positions)
-   - Includes temperature monitoring and positional feedback
-   - Controlled via DYNAMIXEL U2D2 interface
+   - DYNAMIXEL X-Series Smart Servo Motors
+   - High-resolution positioning (4096 positions)
+   - Built-in temperature and position feedback
 
-2. **Intel RealSense D435 Camera**
-   - Provides RGB-D (color + depth) imaging
-   - Used for perception and object detection
-   - Enables 3D mapping of the environment
+2. **Intel RealSense D435**
+   - RGB-D camera for perception
+   - Depth sensing capabilities
+   - 1280x720 resolution
 
-3. **DYNAMIXEL Motors**
-   - Used for precise joint control
-   - Provides feedback for position, velocity, and load
-   - Programmable PID parameters for motion control
+## Installation Requirements
 
-## Software Requirements
-
-### Operating System
-- Ubuntu 20.04 LTS (Focal Fossa)
-
-### ROS Installation
-1. Install ROS Noetic:
-```bash
-# Setup your sources.list
-sudo sh -c 'echo "deb http://packages.ros.org/ros/ubuntu $(lsb_release -sc) main" > /etc/apt/sources.list.d/ros-latest.list'
-
-# Set up your keys
-sudo apt install curl
-curl -s https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc | sudo apt-key add -
-
-# Update package index
-sudo apt update
-
-# Install ROS Noetic Desktop Full
-sudo apt install ros-noetic-desktop-full
-
-# Initialize rosdep
-sudo rosdep init
-rosdep update
-
-# Environment setup
-echo "source /opt/ros/noetic/setup.bash" >> ~/.bashrc
-source ~/.bashrc
-```
-
-2. Install additional dependencies:
-```bash
-sudo apt install python3-rosdep python3-rosinstall python3-rosinstall-generator python3-wstool build-essential
-```
-
-### Simulation Tools
-1. **Gazebo** (included with ROS Desktop Full)
-   - Used for physics simulation
-   - Enables testing without physical hardware
-   - Provides realistic sensor simulation
-
-2. **RViz**
-   - 3D visualization tool
-   - Displays robot state and sensor data
-   - Helps in monitoring and debugging
-
-## Project Setup
-
-1. Create a ROS workspace:
-```bash
-mkdir -p ~/kinetibot_ws/src
-cd ~/kinetibot_ws
-catkin_make
-```
-
-2. Clone the repository:
-```bash
-cd ~/kinetibot_ws/src
-git clone https://github.com/ank27/KinetiRover.git
-```
-
-3. Install dependencies:
-```bash
-cd ~/kinetibot_ws
-rosdep install --from-paths src --ignore-src -r -y
-```
-
-4. Build the workspace:
-```bash
-catkin_make
-source devel/setup.bash
-```
-
-## Testing the Setup
-
-1. Launch the Gazebo simulation:
-```bash
-roslaunch px100_gazebo px100_gazebo.launch
-```
-
-2. Launch RViz visualization:
-```bash
-roslaunch px100_description px100_description.launch use_rviz:=true
-```
-
-## Next Steps
-
-1. Review the [PX100 Documentation](https://docs.trossenrobotics.com/interbotix_xsarms_docs/) for detailed hardware specifications
-2. Explore the source code in the `src` directory
-3. Try running the example scripts in the `examples` directory
+- Ubuntu 20.04 LTS
+- ROS Noetic
+- Gazebo 11
+- MoveIt Framework
+- RealSense SDK 2.0
 
 ## Contributing
 
-1. Create a new branch from master:
-```bash
-git checkout -b feature/your-feature-name
-```
-
-2. Make your changes and commit them:
-```bash
-git add .
-git commit -m "Description of changes"
-```
-
-3. Push to GitHub and create a pull request:
-```bash
-git push origin feature/your-feature-name
-```
+This project is open for contributions. Please follow our [contribution guidelines](contributing.md) when submitting changes.
 
 ## Support
 
-For questions or issues:
-1. Open an issue on GitHub
-2. Check existing documentation
+If you encounter any issues:
+1. Check our [troubleshooting guide](troubleshooting.md)
+2. Open an issue on GitHub
 3. Contact the development team
 
 ---
-This documentation is part of the KinetiRover project. For more detailed information, please visit our [GitHub repository](https://github.com/ank27/KinetiRover).
+Next Tutorial: [Getting Started: Basic Setup](tutorials/getting-started.md)
