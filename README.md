@@ -2,6 +2,18 @@
 
 This repository contains the codebase for a robotic manipulator system based on the [PX100 robot from Trossen Robotics](https://docs.trossenrobotics.com/interbotix_xsarms_docs/specifications/px100.html). The system integrates both simulation and real hardware capabilities using ROS (Robot Operating System).
 
+## Documentation
+
+For comprehensive guides and tutorials, visit our [KinetiRover Documentation Site](https://ank27.github.io/KinetiRover).
+
+The documentation includes:
+- Getting Started Guide
+- PX100 Robot Description
+- Gazebo Simulation Setup
+- MoveIt Integration
+- RealSense Integration
+- Perception Pipeline Setup
+
 ## System Overview
 
 The PX100 is a 4-DOF robotic manipulator with the following specifications:
@@ -35,8 +47,8 @@ mr_kinetik/
 
 ### 2. Software Framework
 - **ROS**: Primary robotics middleware
-- **MoveIt**: Motion planning and manipulation
 - **Gazebo**: Physics simulation
+- **MoveIt**: Motion planning and manipulation
 - **Programming Languages**: Python, C++, XML
 
 ## Quick Start
