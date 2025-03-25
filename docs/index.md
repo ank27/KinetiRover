@@ -22,23 +22,23 @@ Welcome to the KinetiRover documentation! This series of tutorials will guide yo
    - Basic movement testing
    - Joint control interface
 
-4. [RealSense Integration](tutorials/realsense-setup.md)
+4. [MoveIt Integration](tutorials/moveit-setup.md)
+   - MoveIt Setup Assistant
+   - Motion planning configuration
+   - Trajectory execution
+   - Pick and place tasks
+
+5. [RealSense Integration](tutorials/realsense-setup.md)
    - RealSense D435 hardware setup
    - Camera drivers installation
    - Point cloud visualization
    - Camera calibration
 
-5. [Perception Pipeline](tutorials/perception-pipeline.md)
+6. [Perception Pipeline](tutorials/perception-pipeline.md)
    - Point cloud processing
    - Object detection setup
    - Segmentation techniques
    - Workspace monitoring
-
-6. [MoveIt Integration](tutorials/moveit-setup.md)
-   - MoveIt configuration
-   - Motion planning
-   - Trajectory execution
-   - Pick and place tasks
 
 ## Hardware Specifications
 
@@ -60,6 +60,11 @@ The KinetiRover uses the PX100 robotic arm with the following specifications:
    - RGB-D camera for perception
    - Depth sensing capabilities
    - 1280x720 resolution
+
+3. **Jetson Nano**
+   - Onboard computer for robot control
+   - 4GB RAM
+   - CUDA-enabled for computer vision tasks
 
 ## Installation Requirements
 
