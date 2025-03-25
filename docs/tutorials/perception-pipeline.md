@@ -1,353 +1,253 @@
-# Perception Pipeline with Darknet and RealSense D435
+# Perception Pipeline: Object Detection and Pose Estimation
 
-*Previous: [RealSense Integration](realsense-setup.md) | Next: [MoveIt Integration](moveit-setup.md)*
+*Previous: [RealSense Setup](realsense-setup.md) | Next: [MoveIt Integration](moveit-setup.md)*
 
 ## Overview
 
-This tutorial covers setting up the perception pipeline for the PX100 robot using Darknet and Darknet3D with the RealSense D435 camera. The system uses YOLO-based object detection combined with depth information to locate objects in 3D space.
+This tutorial explains how to set up the perception pipeline for the KinetiRover project using RealSense D435 camera data along with darknet_ros and darknet_ros_3d for object detection and pose estimation.
 
 ## Prerequisites
 
-- Complete the [RealSense Integration](realsense-setup.md) tutorial
-- Ubuntu 20.04 with ROS Noetic installed
-- CUDA support (recommended for better performance)
-- RealSense D435 camera properly connected and configured
+- Complete the [RealSense Setup](realsense-setup.md) tutorial
+- ROS Noetic installed
+- CUDA and cuDNN installed (for optimal Darknet performance)
 
-## Dependencies Installation
+## Installation
 
-1. Install required packages:
+### 1. Install darknet_ros
 
 ```bash
-sudo apt-get update
-sudo apt-get install ros-noetic-darknet-ros
-sudo apt-get install python3-pip
-pip3 install numpy opencv-python
+cd ~/kinetibot_ws/src
+git clone https://github.com/leggedrobotics/darknet_ros.git
 ```
 
-2. Clone the gb_visual_detection repository for darknet_ros_3d:
+### 2. Install gb_visual_detection_3d and dependencies
 
 ```bash
 cd ~/kinetibot_ws/src
 git clone https://github.com/IntelligentRoboticsLabs/gb_visual_detection_3d.git
 ```
 
-3. Install additional dependencies and build the workspace:
+### 3. Install any missing dependencies
 
 ```bash
 cd ~/kinetibot_ws
 rosdep install --from-paths src --ignore-src -r -y
+```
+
+### 4. Build the workspace
+
+```bash
 catkin_make
 source devel/setup.bash
 ```
 
-## Perception Package Setup
+## Perception Pipeline Setup
 
-1. Create the perception package:
+### 1. Create a perception package
+
+We'll create a package specifically for the KinetiRover perception pipeline:
 
 ```bash
 cd ~/kinetibot_ws/src
-catkin_create_pkg px100_perception std_msgs sensor_msgs darknet_ros_msgs darknet_ros_3d_msgs roscpp rospy
-cd px100_perception
-mkdir -p launch config scripts
+catkin_create_pkg px100_perception std_msgs rospy sensor_msgs darknet_ros_msgs darknet_ros_3d_msgs
 ```
 
-2. Create the Python Node for Object Detection
+### 2. Set up the perception node
 
-Create a new file `scripts/px100_object_detection.py`:
+Create a new Python script for object detection and pose estimation:
 
 ```bash
-touch ~/kinetibot_ws/src/px100_perception/scripts/px100_object_detection.py
-chmod +x ~/kinetibot_ws/src/px100_perception/scripts/px100_object_detection.py
+mkdir -p ~/kinetibot_ws/src/px100_perception/scripts
+touch ~/kinetibot_ws/src/px100_perception/scripts/px100_object_detector.py
+chmod +x ~/kinetibot_ws/src/px100_perception/scripts/px100_object_detector.py
 ```
 
-Add the following code to the file:
+Edit the file with your favorite editor and add the following code:
 
 ```python
 #!/usr/bin/env python3
 
 import rospy
-import numpy as np
+import tf2_ros
+import tf2_geometry_msgs
 from sensor_msgs.msg import PointCloud2
 from darknet_ros_msgs.msg import BoundingBoxes
-from darknet_ros_3d_msgs.msg import BoundingBox3d, BoundingBoxes3d
-import sensor_msgs.point_cloud2 as pc2
+from darknet_ros_3d_msgs.msg import BoundingBoxes3d, BoundingBox3d
+from geometry_msgs.msg import PoseStamped, TransformStamped
 
-class PX100ObjectDetection:
+class PX100ObjectDetector:
     def __init__(self):
-        rospy.init_node('px100_object_detection', anonymous=True)
-        
-        # Parameters
-        self.camera_frame = rospy.get_param('~camera_frame', 'camera_color_optical_frame')
-        self.target_frame = rospy.get_param('~target_frame', 'base_link')
-        self.min_probability = rospy.get_param('~min_probability', 0.5)
-        self.min_points = rospy.get_param('~min_points', 10)
-        
-        # Subscribers
-        self.bbox_sub = rospy.Subscriber('/darknet_ros/bounding_boxes', 
-                                        BoundingBoxes, self.bbox_callback)
-        self.pc_sub = rospy.Subscriber('/camera/depth/color/points', 
-                                      PointCloud2, self.pc_callback)
+        rospy.init_node('px100_object_detector')
         
         # Publishers
-        self.bbox3d_pub = rospy.Publisher('/px100/detected_objects', 
-                                        BoundingBoxes3d, queue_size=1)
+        self.detected_objects_pub = rospy.Publisher('/px100/detected_objects', BoundingBoxes3d, queue_size=10)
+        self.target_pose_pub = rospy.Publisher('/px100/target_pose', PoseStamped, queue_size=10)
         
-        # Initialize variables
-        self.latest_pc = None
-        self.latest_bboxes = None
+        # Subscribers
+        rospy.Subscriber('/darknet_ros_3d/bounding_boxes', BoundingBoxes3d, self.bbox_callback)
         
-        rospy.loginfo("PX100 Object Detection node initialized")
+        # TF listener
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
         
-    def pc_callback(self, pc_msg):
-        self.latest_pc = pc_msg
-        if self.latest_bboxes is not None:
-            self.process_detections()
-    
-    def bbox_callback(self, bbox_msg):
-        self.latest_bboxes = bbox_msg
-        if self.latest_pc is not None:
-            self.process_detections()
-    
-    def process_detections(self):
-        if self.latest_pc is None or self.latest_bboxes is None:
-            return
-            
-        pc_array = pc2.read_points(self.latest_pc, skip_nans=True, field_names=("x", "y", "z"))
-        pc_list = list(pc_array)
+        rospy.loginfo("PX100 Object Detector node initialized")
         
-        if len(pc_list) == 0:
-            return
-            
-        pc_array = np.array(pc_list)
+    def bbox_callback(self, msg):
+        # Forward the bounding boxes to our topic
+        self.detected_objects_pub.publish(msg)
         
-        # Process each 2D bounding box
-        bboxes3d_msg = BoundingBoxes3d()
-        bboxes3d_msg.header = self.latest_pc.header
-        
-        for bbox in self.latest_bboxes.bounding_boxes:
-            if bbox.probability < self.min_probability:
-                continue
+        # Find objects of interest (e.g., "cube", "bottle", etc.)
+        for bbox in msg.bounding_boxes:
+            if bbox.Class in ['cube', 'bottle', 'can']:
+                rospy.loginfo(f"Found object: {bbox.Class}")
                 
-            # Extract points in the 2D bounding box
-            points_in_bbox = []
-            pc_msg = self.latest_pc
-            
-            # Convert 2D pixel coordinates to 3D points
-            for point in pc2.read_points(pc_msg, skip_nans=True, field_names=("x", "y", "z", "rgb")):
-                x, y, z = point[0:3]
-                # Project 3D point to image plane (simplified - actual implementation would need camera intrinsics)
-                # This is a placeholder - real implementation needs proper projection
-                if x > 0 and z > 0:  # Points in front of camera
-                    points_in_bbox.append((x, y, z))
-            
-            if len(points_in_bbox) < self.min_points:
-                continue
+                # Create pose from bounding box center
+                pose = PoseStamped()
+                pose.header = msg.header
+                pose.pose.position.x = bbox.xmin + (bbox.xmax - bbox.xmin) / 2.0
+                pose.pose.position.y = bbox.ymin + (bbox.ymax - bbox.ymin) / 2.0
+                pose.pose.position.z = bbox.zmin + (bbox.zmax - bbox.zmin) / 2.0
+                pose.pose.orientation.w = 1.0  # Default orientation
                 
-            # Calculate 3D bounding box from points
-            points = np.array(points_in_bbox)
-            min_point = np.min(points, axis=0)
-            max_point = np.max(points, axis=0)
-            center = (min_point + max_point) / 2
-            dimensions = max_point - min_point
-            
-            # Create 3D bounding box message
-            bbox3d = BoundingBox3d()
-            bbox3d.Class = bbox.Class
-            bbox3d.probability = bbox.probability
-            bbox3d.xmin = min_point[0]
-            bbox3d.ymin = min_point[1]
-            bbox3d.zmin = min_point[2]
-            bbox3d.xmax = max_point[0]
-            bbox3d.ymax = max_point[1]
-            bbox3d.zmax = max_point[2]
-            bbox3d.center.x = center[0]
-            bbox3d.center.y = center[1]
-            bbox3d.center.z = center[2]
-            
-            bboxes3d_msg.boxes.append(bbox3d)
-        
-        if len(bboxes3d_msg.boxes) > 0:
-            self.bbox3d_pub.publish(bboxes3d_msg)
-    
-    def run(self):
-        rospy.spin()
+                # Transform pose to base_link frame if needed
+                try:
+                    transform = self.tf_buffer.lookup_transform(
+                        'px100/base_link',
+                        msg.header.frame_id,
+                        rospy.Time(0),
+                        rospy.Duration(1.0))
+                    transformed_pose = tf2_geometry_msgs.do_transform_pose(
+                        pose, transform)
+                    self.target_pose_pub.publish(transformed_pose)
+                except (tf2_ros.LookupException, tf2_ros.ConnectivityException, 
+                        tf2_ros.ExtrapolationException) as e:
+                    rospy.logwarn(f"TF error: {e}")
+                    # Publish untransformed pose as fallback
+                    self.target_pose_pub.publish(pose)
+                break  # Process only the first object of interest
 
 if __name__ == '__main__':
-    try:
-        detector = PX100ObjectDetection()
-        detector.run()
-    except rospy.ROSInterruptException:
-        pass
+    detector = PX100ObjectDetector()
+    rospy.spin()
 ```
 
-## Create Launch Files
+### 3. Create a launch file
 
-1. Create a launch file for darknet_ros configuration:
+Create a launch file to start the perception pipeline:
 
 ```bash
-touch ~/kinetibot_ws/src/px100_perception/launch/px100_darknet.launch
+mkdir -p ~/kinetibot_ws/src/px100_perception/launch
+touch ~/kinetibot_ws/src/px100_perception/launch/px100_perception.launch
 ```
 
-Add the following content:
+Add the following content to the launch file:
 
 ```xml
 <launch>
-    <!-- YOLO Detection-->
-    <include file="$(find darknet_ros)/launch/darknet_ros.launch">
-        <arg name="config_path" value="$(find px100_perception)/config"/>
-        <arg name="image" value="/camera/color/image_raw"/>
-    </include>
+  <!-- Arguments -->
+  <arg name="camera_name" default="camera"/>
+  <arg name="rgb_topic" default="/$(arg camera_name)/color/image_raw"/>
+  <arg name="depth_topic" default="/$(arg camera_name)/aligned_depth_to_color/image_raw"/>
+  <arg name="camera_info" default="/$(arg camera_name)/color/camera_info"/>
+  <arg name="point_cloud_topic" default="/$(arg camera_name)/depth/color/points"/>
+
+  <!-- Launch RealSense camera -->
+  <include file="$(find realsense2_camera)/launch/rs_camera.launch">
+    <arg name="align_depth" value="true"/>
+  </include>
+
+  <!-- Launch Darknet ROS -->
+  <include file="$(find darknet_ros)/launch/darknet_ros.launch">
+    <arg name="image" value="$(arg rgb_topic)"/>
+  </include>
+
+  <!-- Launch Darknet ROS 3D -->
+  <include file="$(find darknet_ros_3d)/launch/darknet_ros_3d.launch">
+    <arg name="input_bbx_topic" value="/darknet_ros/bounding_boxes"/>
+    <arg name="input_cloud_topic" value="$(arg point_cloud_topic)"/>
+    <arg name="output_bbx3d_topic" value="/darknet_ros_3d/bounding_boxes"/>
+    <arg name="working_frame" value="camera_link"/>
+    <arg name="minimum_probability" value="0.3"/>
+  </include>
+
+  <!-- Launch our perception node -->
+  <node pkg="px100_perception" type="px100_object_detector.py" name="px100_object_detector" output="screen"/>
 </launch>
 ```
 
-2. Create a launch file for the perception pipeline:
+### 4. Configure package.xml
 
-```bash
-touch ~/kinetibot_ws/src/px100_perception/launch/px100_perception_pipeline.launch
-```
-
-Add the following content:
+Update the package.xml file to include the correct dependencies:
 
 ```xml
-<launch>
-    <!-- RealSense Camera -->
-    <include file="$(find realsense2_camera)/launch/rs_camera.launch">
-        <arg name="align_depth" value="true" />
-        <arg name="filters" value="pointcloud" />
-    </include>
-    
-    <!-- Darknet ROS -->
-    <include file="$(find px100_perception)/launch/px100_darknet.launch" />
-    
-    <!-- 3D Object Detection Node -->
-    <node pkg="px100_perception" type="px100_object_detection.py" name="px100_object_detection" output="screen">
-        <param name="camera_frame" value="camera_color_optical_frame" />
-        <param name="target_frame" value="base_link" />
-        <param name="min_probability" value="0.5" />
-        <param name="min_points" value="10" />
-    </node>
-</launch>
+<?xml version="1.0"?>
+<package format="2">
+  <name>px100_perception</name>
+  <version>0.0.1</version>
+  <description>Perception pipeline for KinetiRover using PX100</description>
+
+  <maintainer email="your_email@example.com">Your Name</maintainer>
+  <license>TODO</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <depend>rospy</depend>
+  <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>darknet_ros_msgs</depend>
+  <depend>darknet_ros_3d_msgs</depend>
+  <depend>tf2_ros</depend>
+  <depend>tf2_geometry_msgs</depend>
+
+  <exec_depend>darknet_ros</exec_depend>
+  <exec_depend>darknet_ros_3d</exec_depend>
+  <exec_depend>realsense2_camera</exec_depend>
+
+  <export>
+  </export>
+</package>
 ```
 
-## Create Configuration Files
-
-1. Create YOLO configuration folder:
+## Running the Perception Pipeline
 
 ```bash
-mkdir -p ~/kinetibot_ws/src/px100_perception/config/yolo
-```
-
-2. Create the object classes file:
-
-```bash
-touch ~/kinetibot_ws/src/px100_perception/config/yolo/px100_classes.names
-```
-
-Add objects you want to detect, for example:
-
-```
-cube
-cylinder
-sphere
-bot
-```
-
-3. Create YOLO configuration file:
-
-```bash
-touch ~/kinetibot_ws/src/px100_perception/config/yolo/px100.cfg
-```
-
-This file should have your YOLO model configuration. You can start with YOLOv3 or YOLOv4 configurations.
-
-4. Create darknet_ros configuration file:
-
-```bash
-touch ~/kinetibot_ws/src/px100_perception/config/px100_darknet_ros.yaml
-```
-
-Add the following content:
-
-```yaml
-yolo_model:
-
-  config_file:
-    name: px100.cfg
-  weight_file:
-    name: px100.weights
-  threshold:
-    value: 0.5
-  detection_classes:
-    names:
-      - cube
-      - cylinder
-      - sphere
-      - bot
-```
-
-## Testing the Perception Pipeline
-
-1. Build the workspace:
-
-```bash
+# Make sure your workspace is built and sourced
 cd ~/kinetibot_ws
 catkin_make
 source devel/setup.bash
+
+# Launch the perception pipeline
+roslaunch px100_perception px100_perception.launch
 ```
 
-2. Launch the perception pipeline:
+## Visualization
 
-```bash
-roslaunch px100_perception px100_perception_pipeline.launch
-```
-
-3. Visualize the results in RViz:
+To visualize the detected objects, use RViz:
 
 ```bash
 rosrun rviz rviz
 ```
 
-In RViz, add the following displays:
-1. PointCloud2 for the camera data
-2. MarkerArray for the 3D bounding boxes
+Add these displays:
+1. Image (topic: /darknet_ros/detection_image)
+2. PointCloud2 (topic: /camera/depth/color/points)
+3. MarkerArray (topic: /darknet_ros_3d/markers)
 
-## Custom Object Training
+## Testing Object Detection
 
-To train your own custom model:
+1. Place objects in front of the RealSense camera
+2. Check the terminal for detection messages
+3. Verify bounding boxes in RViz
+4. Check the pose data:
+   ```bash
+   rostopic echo /px100/target_pose
+   ```
 
-1. Collect and annotate images of objects you want to detect
-2. Train YOLO using Darknet framework
-3. Place the trained weights file in the `config/yolo` directory
-4. Update the configuration files accordingly
+## Next Steps
 
-## Integration with Robot Control
-
-To integrate object detection with robot control, the 3D bounding boxes can be used for:
-
-- Pick and place operations
-- Obstacle avoidance
-- Visual servoing
-- Scene understanding
-
-The detected objects are published on the `/px100/detected_objects` topic which can be subscribed by your robot control node.
-
-## Troubleshooting
-
-1. **No detections**:
-   - Ensure camera is properly connected
-   - Check lighting conditions
-   - Verify the model is correctly loaded
-
-2. **Inaccurate 3D bounding boxes**:
-   - Camera might need calibration
-   - Adjust the `min_points` parameter
-   - Use a different point cloud filtering method
-
-3. **Slow performance**:
-   - Consider using a GPU
-   - Reduce the input image resolution
-   - Adjust the detection frequency
+Now that you have a working perception system that can detect objects and estimate their 3D poses, you're ready to move on to [MoveIt Integration](moveit-setup.md) to implement pick and place functionality.
 
 ---
 
-*Previous: [RealSense Integration](realsense-setup.md) | Next: [MoveIt Integration](moveit-setup.md)*
+*Previous: [RealSense Setup](realsense-setup.md) | Next: [MoveIt Integration](moveit-setup.md)*
