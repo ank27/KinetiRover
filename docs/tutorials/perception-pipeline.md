@@ -1,253 +1,278 @@
-# Perception Pipeline: Object Detection and Pose Estimation
+# Perception Pipeline
 
 *Previous: [RealSense Setup](realsense-setup.md) | Next: [MoveIt Integration](moveit-setup.md)*
 
 ## Overview
 
-This tutorial explains how to set up the perception pipeline for the KinetiRover project using RealSense D435 camera data along with darknet_ros and darknet_ros_3d for object detection and pose estimation.
+This tutorial covers setting up the perception pipeline for the KinetiRover, which uses the RealSense D435 camera and darknet_ros_3d for object detection and localization. We'll be using the darknet_ros_3d_msgs for processing bounding boxes and integrating with the existing PickAndPlace class.
 
 ## Prerequisites
 
-- Complete the [RealSense Setup](realsense-setup.md) tutorial
+- Completed the [RealSense Setup](realsense-setup.md) tutorial
 - ROS Noetic installed
-- CUDA and cuDNN installed (for optimal Darknet performance)
+- KinetiRover repository cloned and built
+- darknet_ros_3d package installed
 
-## Installation
-
-### 1. Install darknet_ros
-
-```bash
-cd ~/kinetibot_ws/src
-git clone https://github.com/leggedrobotics/darknet_ros.git
-```
-
-### 2. Install gb_visual_detection_3d and dependencies
+## Install Dependencies
 
 ```bash
+# Install darknet_ros_3d
 cd ~/kinetibot_ws/src
 git clone https://github.com/IntelligentRoboticsLabs/gb_visual_detection_3d.git
-```
-
-### 3. Install any missing dependencies
-
-```bash
-cd ~/kinetibot_ws
-rosdep install --from-paths src --ignore-src -r -y
-```
-
-### 4. Build the workspace
-
-```bash
+cd ..
 catkin_make
 source devel/setup.bash
+
+# Install additional dependencies
+sudo apt install ros-noetic-pcl-ros ros-noetic-pcl-conversions python3-pcl
 ```
 
-## Perception Pipeline Setup
+## Perception Pipeline Components
 
-### 1. Create a perception package
+Our perception system consists of the following components:
 
-We'll create a package specifically for the KinetiRover perception pipeline:
+1. **RealSense D435** - Provides RGB and depth data
+2. **darknet_ros_3d** - Performs object detection and 3D localization
+3. **PCL processing** - Filters and segments point clouds
+4. **PickAndPlace class** - Handles object manipulation based on perception data
 
-```bash
-cd ~/kinetibot_ws/src
-catkin_create_pkg px100_perception std_msgs rospy sensor_msgs darknet_ros_msgs darknet_ros_3d_msgs
-```
+## Perception Node Implementation
 
-### 2. Set up the perception node
-
-Create a new Python script for object detection and pose estimation:
-
-```bash
-mkdir -p ~/kinetibot_ws/src/px100_perception/scripts
-touch ~/kinetibot_ws/src/px100_perception/scripts/px100_object_detector.py
-chmod +x ~/kinetibot_ws/src/px100_perception/scripts/px100_object_detector.py
-```
-
-Edit the file with your favorite editor and add the following code:
+Let's create a Python node that subscribes to the darknet_ros_3d_msgs and integrates with our PickAndPlace class:
 
 ```python
 #!/usr/bin/env python3
 
 import rospy
+import numpy as np
 import tf2_ros
 import tf2_geometry_msgs
-from sensor_msgs.msg import PointCloud2
-from darknet_ros_msgs.msg import BoundingBoxes
+from geometry_msgs.msg import PoseStamped, Point
 from darknet_ros_3d_msgs.msg import BoundingBoxes3d, BoundingBox3d
-from geometry_msgs.msg import PoseStamped, TransformStamped
+from sensor_msgs.msg import PointCloud2
+import sensor_msgs.point_cloud2 as pc2
+from visualization_msgs.msg import Marker, MarkerArray
 
-class PX100ObjectDetector:
+class ObjectDetector:
     def __init__(self):
-        rospy.init_node('px100_object_detector')
+        rospy.init_node('object_detector_node')
         
-        # Publishers
-        self.detected_objects_pub = rospy.Publisher('/px100/detected_objects', BoundingBoxes3d, queue_size=10)
-        self.target_pose_pub = rospy.Publisher('/px100/target_pose', PoseStamped, queue_size=10)
-        
-        # Subscribers
-        rospy.Subscriber('/darknet_ros_3d/bounding_boxes', BoundingBoxes3d, self.bbox_callback)
+        # Parameters
+        self.target_frame = rospy.get_param('~target_frame', 'base_link')
+        self.min_confidence = rospy.get_param('~min_confidence', 0.5)
+        self.target_objects = rospy.get_param('~target_objects', ['bottle', 'cup'])
         
         # TF listener
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
         
-        rospy.loginfo("PX100 Object Detector node initialized")
+        # Publishers
+        self.marker_pub = rospy.Publisher('detected_objects', MarkerArray, queue_size=1)
         
-    def bbox_callback(self, msg):
-        # Forward the bounding boxes to our topic
-        self.detected_objects_pub.publish(msg)
+        # Subscribers
+        rospy.Subscriber(
+            'darknet_ros_3d/bounding_boxes', 
+            BoundingBoxes3d, 
+            self.detection_callback
+        )
         
-        # Find objects of interest (e.g., "cube", "bottle", etc.)
-        for bbox in msg.bounding_boxes:
-            if bbox.Class in ['cube', 'bottle', 'can']:
-                rospy.loginfo(f"Found object: {bbox.Class}")
-                
-                # Create pose from bounding box center
-                pose = PoseStamped()
-                pose.header = msg.header
-                pose.pose.position.x = bbox.xmin + (bbox.xmax - bbox.xmin) / 2.0
-                pose.pose.position.y = bbox.ymin + (bbox.ymax - bbox.ymin) / 2.0
-                pose.pose.position.z = bbox.zmin + (bbox.zmax - bbox.zmin) / 2.0
-                pose.pose.orientation.w = 1.0  # Default orientation
-                
-                # Transform pose to base_link frame if needed
+        # Initialize the PickAndPlace interface
+        self.pick_place = PickAndPlace()
+        
+        rospy.loginfo("Object detector node initialized")
+    
+    def detection_callback(self, bbox_msg):
+        # Create marker array for visualization
+        marker_array = MarkerArray()
+        detected_objects = []
+        
+        for i, bbox in enumerate(bbox_msg.bounding_boxes):
+            # Skip objects with low confidence or not in target list
+            if bbox.probability < self.min_confidence or bbox.Class not in self.target_objects:
+                continue
+            
+            # Create pose from bounding box center
+            object_pose = PoseStamped()
+            object_pose.header = bbox_msg.header
+            object_pose.pose.position = bbox.center
+            object_pose.pose.orientation.w = 1.0
+            
+            # Transform to target frame if needed
+            if bbox_msg.header.frame_id != self.target_frame:
                 try:
-                    transform = self.tf_buffer.lookup_transform(
-                        'px100/base_link',
-                        msg.header.frame_id,
-                        rospy.Time(0),
-                        rospy.Duration(1.0))
-                    transformed_pose = tf2_geometry_msgs.do_transform_pose(
-                        pose, transform)
-                    self.target_pose_pub.publish(transformed_pose)
-                except (tf2_ros.LookupException, tf2_ros.ConnectivityException, 
-                        tf2_ros.ExtrapolationException) as e:
-                    rospy.logwarn(f"TF error: {e}")
-                    # Publish untransformed pose as fallback
-                    self.target_pose_pub.publish(pose)
-                break  # Process only the first object of interest
+                    object_pose = self.tf_buffer.transform(object_pose, self.target_frame)
+                except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException) as e:
+                    rospy.logwarn(f"TF Error: {e}")
+                    continue
+            
+            # Add to detected objects list
+            detected_objects.append({
+                'class': bbox.Class,
+                'pose': object_pose.pose,
+                'dimensions': {
+                    'x': bbox.size.x,
+                    'y': bbox.size.y,
+                    'z': bbox.size.z
+                },
+                'probability': bbox.probability
+            })
+            
+            # Create marker for visualization
+            marker = Marker()
+            marker.header = object_pose.header
+            marker.id = i
+            marker.type = Marker.CUBE
+            marker.action = Marker.ADD
+            marker.pose = object_pose.pose
+            marker.scale = bbox.size
+            marker.color.r = 1.0 if bbox.Class == 'bottle' else 0.0
+            marker.color.g = 0.0 if bbox.Class == 'bottle' else 1.0
+            marker.color.b = 0.0
+            marker.color.a = 0.6
+            marker.lifetime = rospy.Duration(0.5)
+            marker_array.markers.append(marker)
+            
+            # Add text marker for the class name
+            text_marker = Marker()
+            text_marker.header = object_pose.header
+            text_marker.id = i + 1000  # Offset to avoid ID collision
+            text_marker.type = Marker.TEXT_VIEW_FACING
+            text_marker.action = Marker.ADD
+            text_marker.pose = object_pose.pose
+            text_marker.pose.position.z += (bbox.size.z / 2) + 0.05  # Position text above object
+            text_marker.text = f"{bbox.Class}: {bbox.probability:.2f}"
+            text_marker.scale.z = 0.05  # Text height
+            text_marker.color.r = 1.0
+            text_marker.color.g = 1.0
+            text_marker.color.b = 1.0
+            text_marker.color.a = 1.0
+            text_marker.lifetime = rospy.Duration(0.5)
+            marker_array.markers.append(text_marker)
+        
+        # Publish markers
+        if marker_array.markers:
+            self.marker_pub.publish(marker_array)
+            
+        # Update PickAndPlace with detected objects
+        if detected_objects:
+            self.pick_place.update_objects(detected_objects)
 
-if __name__ == '__main__':
-    detector = PX100ObjectDetector()
-    rospy.spin()
+# The PickAndPlace class is kept as is from the existing implementation
+class PickAndPlace:
+    def __init__(self):
+        # Initialize connection to the robot
+        rospy.loginfo("Initializing PickAndPlace interface")
+        # Any initialization from the existing class...
+        
+    def update_objects(self, detected_objects):
+        # Process detected objects for potential picking
+        if not detected_objects:
+            rospy.loginfo("No objects detected for picking")
+            return
+        
+        # Sort objects by confidence
+        sorted_objects = sorted(detected_objects, key=lambda obj: obj['probability'], reverse=True)
+        rospy.loginfo(f"Found {len(sorted_objects)} objects for potential picking")
+        
+        # Further processing with the existing PickAndPlace class...
+        # This would include planning grasps, executing pick and place movements, etc.
+
+if __name__ == "__main__":
+    try:
+        detector = ObjectDetector()
+        rospy.spin()
+    except rospy.ROSInterruptException:
+        pass
 ```
 
-### 3. Create a launch file
+## Launch File
 
-Create a launch file to start the perception pipeline:
-
-```bash
-mkdir -p ~/kinetibot_ws/src/px100_perception/launch
-touch ~/kinetibot_ws/src/px100_perception/launch/px100_perception.launch
-```
-
-Add the following content to the launch file:
+Create a launch file to run the perception pipeline:
 
 ```xml
 <launch>
-  <!-- Arguments -->
-  <arg name="camera_name" default="camera"/>
-  <arg name="rgb_topic" default="/$(arg camera_name)/color/image_raw"/>
-  <arg name="depth_topic" default="/$(arg camera_name)/aligned_depth_to_color/image_raw"/>
-  <arg name="camera_info" default="/$(arg camera_name)/color/camera_info"/>
-  <arg name="point_cloud_topic" default="/$(arg camera_name)/depth/color/points"/>
-
-  <!-- Launch RealSense camera -->
+  <!-- Start RealSense camera -->
   <include file="$(find realsense2_camera)/launch/rs_camera.launch">
     <arg name="align_depth" value="true"/>
   </include>
-
-  <!-- Launch Darknet ROS -->
-  <include file="$(find darknet_ros)/launch/darknet_ros.launch">
-    <arg name="image" value="$(arg rgb_topic)"/>
-  </include>
-
-  <!-- Launch Darknet ROS 3D -->
-  <include file="$(find darknet_ros_3d)/launch/darknet_ros_3d.launch">
-    <arg name="input_bbx_topic" value="/darknet_ros/bounding_boxes"/>
-    <arg name="input_cloud_topic" value="$(arg point_cloud_topic)"/>
-    <arg name="output_bbx3d_topic" value="/darknet_ros_3d/bounding_boxes"/>
-    <arg name="working_frame" value="camera_link"/>
-    <arg name="minimum_probability" value="0.3"/>
-  </include>
-
-  <!-- Launch our perception node -->
-  <node pkg="px100_perception" type="px100_object_detector.py" name="px100_object_detector" output="screen"/>
+  
+  <!-- Start darknet_ros_3d -->
+  <include file="$(find darknet_ros_3d)/launch/darknet_ros_3d.launch"/>
+  
+  <!-- Start our object detector node -->
+  <node name="object_detector" pkg="kinetibot_perception" type="object_detector.py" output="screen">
+    <param name="target_frame" value="base_link"/>
+    <param name="min_confidence" value="0.60"/>
+    <rosparam param="target_objects">["bottle", "cup", "book"]</rosparam>
+  </node>
+  
+  <!-- Start RViz for visualization -->
+  <node name="rviz" pkg="rviz" type="rviz" args="-d $(find kinetibot_perception)/config/perception.rviz"/>
 </launch>
 ```
 
-### 4. Configure package.xml
+## RViz Configuration
 
-Update the package.xml file to include the correct dependencies:
+Create an RViz configuration to visualize the perception pipeline:
 
-```xml
-<?xml version="1.0"?>
-<package format="2">
-  <name>px100_perception</name>
-  <version>0.0.1</version>
-  <description>Perception pipeline for KinetiRover using PX100</description>
-
-  <maintainer email="your_email@example.com">Your Name</maintainer>
-  <license>TODO</license>
-
-  <buildtool_depend>catkin</buildtool_depend>
-  <depend>rospy</depend>
-  <depend>std_msgs</depend>
-  <depend>sensor_msgs</depend>
-  <depend>geometry_msgs</depend>
-  <depend>darknet_ros_msgs</depend>
-  <depend>darknet_ros_3d_msgs</depend>
-  <depend>tf2_ros</depend>
-  <depend>tf2_geometry_msgs</depend>
-
-  <exec_depend>darknet_ros</exec_depend>
-  <exec_depend>darknet_ros_3d</exec_depend>
-  <exec_depend>realsense2_camera</exec_depend>
-
-  <export>
-  </export>
-</package>
-```
+1. Add the RGB and depth image displays for the RealSense camera
+2. Add a PointCloud2 display for the processed point cloud
+3. Add a MarkerArray display for the detected objects
+4. Add a TF display to visualize coordinate frames
 
 ## Running the Perception Pipeline
 
 ```bash
-# Make sure your workspace is built and sourced
-cd ~/kinetibot_ws
-catkin_make
-source devel/setup.bash
-
-# Launch the perception pipeline
-roslaunch px100_perception px100_perception.launch
+# Start the perception pipeline
+roslaunch kinetibot_perception perception_pipeline.launch
 ```
 
-## Visualization
+## Integrating with MoveIt
 
-To visualize the detected objects, use RViz:
+The PickAndPlace class will interact with MoveIt to perform actual manipulation based on the perception data. Key integration points include:
+
+1. Converting detected object poses to the robot's base frame
+2. Planning grasp approaches based on object dimensions
+3. Executing pick and place movements
+
+This integration will be covered in more detail in the [MoveIt Integration](moveit-setup.md) tutorial.
+
+## Troubleshooting
+
+### Common Issues
+
+1. **No objects detected**
+   - Check that the camera is properly connected
+   - Verify darknet_ros_3d is running
+   - Ensure proper lighting conditions
+
+2. **Incorrect 3D positions**
+   - Check camera calibration
+   - Verify TF tree is correctly set up
+   - Adjust the camera position for better view
+
+3. **Low detection confidence**
+   - Try retraining the detection model
+   - Adjust lighting conditions
+   - Ensure objects are clearly visible
+
+### Verifying the Pipeline
+
+You can check individual components with these commands:
 
 ```bash
-rosrun rviz rviz
+# Check darknet_ros_3d detections
+rostopic echo /darknet_ros_3d/bounding_boxes
+
+# Visualize detected objects
+rostopic echo /detected_objects
+
+# Check camera point cloud
+rostopic echo /camera/depth/color/points
 ```
-
-Add these displays:
-1. Image (topic: /darknet_ros/detection_image)
-2. PointCloud2 (topic: /camera/depth/color/points)
-3. MarkerArray (topic: /darknet_ros_3d/markers)
-
-## Testing Object Detection
-
-1. Place objects in front of the RealSense camera
-2. Check the terminal for detection messages
-3. Verify bounding boxes in RViz
-4. Check the pose data:
-   ```bash
-   rostopic echo /px100/target_pose
-   ```
 
 ## Next Steps
 
-Now that you have a working perception system that can detect objects and estimate their 3D poses, you're ready to move on to [MoveIt Integration](moveit-setup.md) to implement pick and place functionality.
-
----
+Now that you have a working perception pipeline, proceed to the [MoveIt Integration](moveit-setup.md) tutorial to learn how to use this perception data for manipulation tasks.
 
 *Previous: [RealSense Setup](realsense-setup.md) | Next: [MoveIt Integration](moveit-setup.md)*
