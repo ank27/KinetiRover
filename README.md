@@ -4,15 +4,15 @@ This repository contains the codebase for a robotic manipulator system based on 
 
 ## Documentation
 
-**[📚 View the complete documentation and tutorials](https://ank27.github.io/KinetiRover)**
+For comprehensive guides and tutorials, visit our [KinetiRover Documentation Site](https://ank27.github.io/KinetiRover).
 
-Visit our GitHub Pages site for comprehensive guides on:
-- System setup and installation
-- Robot description and configuration
-- Gazebo simulation
-- RealSense camera integration
-- Perception pipeline
-- MoveIt integration
+The documentation includes:
+- Getting Started Guide
+- PX100 Robot Description
+- Gazebo Simulation Setup
+- MoveIt Integration
+- RealSense Integration
+- Perception Pipeline Setup
 
 ## System Overview
 
@@ -47,8 +47,8 @@ mr_kinetik/
 
 ### 2. Software Framework
 - **ROS**: Primary robotics middleware
-- **MoveIt**: Motion planning and manipulation
 - **Gazebo**: Physics simulation
+- **MoveIt**: Motion planning and manipulation
 - **Programming Languages**: Python, C++, XML
 
 ## Quick Start
