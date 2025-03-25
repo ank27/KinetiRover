@@ -4,7 +4,7 @@
 
 ## Introduction
 
-The perception pipeline is a critical component of the KinetiRover robotic system. It bridges the gap between sensing the environment and taking action. In this tutorial, we'll implement a robust perception pipeline using Darknet (YOLO) and Darknet3D to detect objects in both 2D images and 3D space, then integrate with MoveIt for pick and place operations.
+The perception pipeline is a critical component of the KinetiRover robotic system. It bridges the gap between sensing the environment and taking action. In this tutorial, we'll implement a robust perception pipeline using Darknet (YOLO) and 3D object detection to identify objects in both 2D images and 3D space, then integrate with MoveIt for pick and place operations.
 
 ## Prerequisites
 
@@ -19,8 +19,8 @@ Our perception pipeline consists of the following components:
 
 ```
 +----------------+     +---------------+     +----------------+
-| RealSense D435 | --> | Darknet YOLO  | --> | Darknet3D      |
-| Camera         |     | 2D Detection  |     | 3D Localization|
+| RealSense D435 | --> | Darknet YOLO  | --> | 3D Object      |
+| Camera         |     | 2D Detection  |     | Localization   |
 +----------------+     +---------------+     +----------------+
                                                      |
 +----------------+     +---------------+     +----------------+
@@ -29,7 +29,7 @@ Our perception pipeline consists of the following components:
 +----------------+     +---------------+     +----------------+
 ```
 
-## 2. Installing Darknet ROS and Darknet3D
+## 2. Installing Required Packages
 
 ### 2.1 Installing Darknet ROS
 
@@ -43,22 +43,22 @@ cd ~/kinetibot_ws
 catkin_make
 ```
 
-### 2.2 Installing Darknet3D
+### 2.2 Installing 3D Detection Packages
 
 ```bash
-# Clone darknet3d repository
+# Clone the gb_visual_detection_3d package
 cd ~/kinetibot_ws/src
-git clone https://github.com/tom13133/darknet3d.git
+git clone https://github.com/IntelligentRoboticsLabs/gb_visual_detection_3d.git
 
 # Install dependencies
-sudo apt-get install ros-noetic-jsk-recognition-msgs ros-noetic-jsk-rviz-plugins
+sudo apt-get install ros-noetic-pcl-ros ros-noetic-vision-msgs
 
 # Build the workspace again
 cd ~/kinetibot_ws
 catkin_make
 ```
 
-## 3. Configuring Darknet and Darknet3D
+## 3. Configuring the Perception Pipeline
 
 ### 3.1 Create a Launch File for Object Detection
 
@@ -83,30 +83,29 @@ Create a new launch file `perception_pipeline.launch` in your package:
     <arg name="yolo_config_path" value="$(find darknet_ros)/yolo_network_config/cfg"/>
   </include>
 
-  <!-- Start Darknet3D -->
-  <node name="darknet3d" pkg="darknet3d" type="darknet3d_node" output="screen">
-    <param name="camera_frame_id" value="camera_color_optical_frame"/>
-    <param name="root_frame_id" value="base_link"/>
-    <param name="input_bbx_topic" value="/darknet_ros/bounding_boxes"/>
-    <param name="input_pc_topic" value="/camera/depth/color/points"/>
-    <param name="detections_topic" value="/darknet3d/detections"/>
-    <param name="visualization_marker_topic" value="/darknet3d/markers"/>
-    <param name="min_probability" value="0.3"/>
-    <param name="min_points" value="10"/>
+  <!-- Start 3D Object Detection -->
+  <node name="darknet3d" pkg="darknet_ros_3d" type="darknet_ros_3d_node" output="screen">
+    <param name="frame_id" value="camera_link"/>
+    <param name="minimum_probability" value="0.4"/>
+    <param name="minimum_detection_threshold" value="0.3"/>
+    <param name="interested_classes" value="bottle,cup"/>
+    <remap from="darknet_ros_3d/bounding_boxes" to="/darknet_ros_3d/bounding_boxes"/>
+    <remap from="darknet_ros/bounding_boxes" to="/darknet_ros/bounding_boxes"/>
+    <remap from="points" to="/camera/depth/color/points"/>
   </node>
 </launch>
 ```
 
-### 3.2 Understanding Darknet3D
+### 3.2 Understanding the 3D Object Detection
 
-Darknet3D takes the 2D bounding boxes from YOLO detection and the point cloud from the RealSense camera to compute 3D bounding boxes. It outputs:
+The 3D object detection node takes the 2D bounding boxes from YOLO detection and the point cloud from the RealSense camera to compute 3D bounding boxes. It outputs:
 
-1. `jsk_recognition_msgs/BoundingBoxArray` - 3D bounding boxes for detected objects
-2. `visualization_msgs/MarkerArray` - Visualization markers for RViz
+1. `gb_visual_detection_3d_msgs/BoundingBoxes3d` - 3D bounding boxes for detected objects
+2. Visualization markers for RViz
 
 ## 4. Creating a Pick and Place Node with MoveIt Integration
 
-Let's create a Python node to handle pick and place operations based on the Darknet3D detections:
+Let's create a Python node to handle pick and place operations based on the 3D detections:
 
 ```python
 #!/usr/bin/env python3
@@ -119,7 +118,7 @@ import geometry_msgs.msg
 from math import pi
 from std_msgs.msg import String
 from geometry_msgs.msg import PoseStamped, Pose
-from jsk_recognition_msgs.msg import BoundingBoxArray, BoundingBox
+from gb_visual_detection_3d_msgs.msg import BoundingBoxes3d, BoundingBox3d
 from tf.transformations import quaternion_from_euler, euler_from_quaternion
 import numpy as np
 import tf2_ros
@@ -161,8 +160,8 @@ class PickAndPlace:
         self.add_table()
         
         # Subscribe to 3D bounding box topic
-        self.detection_sub = rospy.Subscriber('/darknet3d/detections', 
-                                             BoundingBoxArray, 
+        self.detection_sub = rospy.Subscriber('/darknet_ros_3d/bounding_boxes', 
+                                             BoundingBoxes3d, 
                                              self.detection_callback)
         
         rospy.loginfo("Pick and place node initialized. Waiting for object detections...")
@@ -207,13 +206,13 @@ class PickAndPlace:
         
     def detection_callback(self, msg):
         # Skip if no detections
-        if len(msg.boxes) == 0:
+        if len(msg.bounding_boxes) == 0:
             return
         
         # Find our target object
         target_box = None
-        for box in msg.boxes:
-            if box.label == self.target_object:
+        for box in msg.bounding_boxes:
+            if box.class_id == self.target_object:
                 target_box = box
                 break
         
@@ -231,12 +230,13 @@ class PickAndPlace:
     def calculate_grasp_pose(self, box):
         # Create a pose for grasping the object
         grasp_pose = PoseStamped()
-        grasp_pose.header = box.header
+        grasp_pose.header.frame_id = box.header.frame_id
+        grasp_pose.header.stamp = rospy.Time.now()
         
-        # Position slightly above the center of the box
-        grasp_pose.pose.position.x = box.pose.position.x
-        grasp_pose.pose.position.y = box.pose.position.y
-        grasp_pose.pose.position.z = box.pose.position.z + box.dimensions.z/2 + 0.05  # Add offset for approach
+        # Position at the center of the box
+        grasp_pose.pose.position.x = box.center.x
+        grasp_pose.pose.position.y = box.center.y
+        grasp_pose.pose.position.z = box.center.z + box.size.z/2 + 0.05  # Add offset for approach
         
         # Orientation for top-down grasp
         q = quaternion_from_euler(0, pi/2, 0)  # Roll, Pitch, Yaw
@@ -414,9 +414,8 @@ To help visualize the perception pipeline, create an RViz configuration with the
 2. TF - to visualize coordinate frames
 3. Camera (RGB) - to show the camera view with YOLO detections
 4. PointCloud2 - to visualize the point cloud data
-5. BoundingBoxArray - to show the 3D bounding boxes from Darknet3D
-6. MarkerArray - to visualize detected objects
-7. PlanningScene - to show collision objects and planned trajectories
+5. MarkerArray - to visualize detected objects and 3D bounding boxes
+6. PlanningScene - to show collision objects and planned trajectories
 
 ## 7. Training Custom YOLO Models
 
@@ -481,7 +480,7 @@ wget https://github.com/AlexeyAB/darknet/releases/download/darknet_yolo_v4_pre/y
 roslaunch kinetirover_perception perception_pipeline.launch
 
 # In another terminal, monitor detections
-rostopic echo /darknet3d/detections
+rostopic echo /darknet_ros_3d/bounding_boxes
 
 # Once confirmed working, run the pick and place demo
 roslaunch kinetirover_manipulation pick_place.launch
@@ -496,7 +495,7 @@ roslaunch kinetirover_manipulation pick_place.launch
 
 2. Check if 3D bounding boxes are generated:
    ```bash
-   rostopic echo /darknet3d/detections
+   rostopic echo /darknet_ros_3d/bounding_boxes
    ```
 
 3. Watch RViz for visual confirmation of detections and planned paths
@@ -518,7 +517,7 @@ roslaunch kinetirover_manipulation pick_place.launch
 2. **3D localization errors**
    - Check camera calibration
    - Verify TF transformations between camera and robot
-   - Adjust min_points and min_probability parameters
+   - Adjust minimum_probability and minimum_detection_threshold parameters
 
 3. **Gripper fails to grasp objects**
    - Check object size is within gripper capacity
@@ -529,18 +528,18 @@ roslaunch kinetirover_manipulation pick_place.launch
 
 1. Use `rosrun rqt_image_view rqt_image_view` to visualize camera feeds
 2. Use `rqt_tf_tree` to verify TF frame relationships
-3. Inspect point cloud using `pcl_viewer`
+3. Use `rostopic hz /darknet_ros_3d/bounding_boxes` to check detection rate
 
 ## 10. Performance Optimization
 
 1. **Reduce point cloud resolution** to improve processing speed
-2. **Increase min_probability threshold** to filter out low-confidence detections
+2. **Increase minimum_probability threshold** to filter out low-confidence detections
 3. **Limit detection area** using a region of interest
 4. **Use a lighter YOLO model** (like YOLOv4-tiny) for faster inference
 
 ## Conclusion
 
-In this tutorial, we've implemented a complete perception pipeline using Darknet YOLO for 2D object detection and Darknet3D for 3D localization. We've integrated this with MoveIt to enable pick and place operations with the PX100 robotic arm. The system can be extended with custom object detection models and optimized for specific applications.
+In this tutorial, we've implemented a complete perception pipeline using Darknet YOLO for 2D object detection and 3D object localization using the gb_visual_detection_3d package. We've integrated this with MoveIt to enable pick and place operations with the PX100 robotic arm. The system can be extended with custom object detection models and optimized for specific applications.
 
 ---
 *Previous: [RealSense Setup](realsense-setup.md) | Next: [MoveIt Integration](moveit-setup.md)*
