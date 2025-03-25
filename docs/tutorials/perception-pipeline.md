@@ -4,391 +4,109 @@
 
 ## Introduction
 
-The perception pipeline is a critical component of any robotic system that interacts with its environment. For the KinetiRover, the perception pipeline enables the robot to identify objects, determine their positions in 3D space, and ultimately perform pick-and-place operations.
-
-In this tutorial, we'll cover:
-1. Setting up the perception pipeline components
-2. Point cloud processing techniques
-3. Object detection with YOLO
-4. Combining 2D detection with 3D point clouds
-5. Integration with MoveIt for pick-and-place tasks
+The perception pipeline is a critical component of the KinetiRover robotic system. It bridges the gap between sensing the environment and taking action. In this tutorial, we'll implement a robust perception pipeline using Darknet (YOLO) and Darknet3D to detect objects in both 2D images and 3D space, then integrate with MoveIt for pick and place operations.
 
 ## Prerequisites
 
+- Ubuntu 20.04 with ROS Noetic installed
 - KinetiRover base setup completed
 - RealSense D435 camera configured
-- ROS Noetic installed
 - Basic understanding of Python programming
 
-## 1. Perception Pipeline Architecture
+## 1. Perception System Architecture
 
-Our perception pipeline consists of several components:
+Our perception pipeline consists of the following components:
 
 ```
-+-----------------+     +----------------+     +---------------+
-| RealSense D435  | --> | Point Cloud    | --> | Segmentation  |
-| Camera          |     | Preprocessing  |     |               |
-+-----------------+     +----------------+     +---------------+
-                                                      |
-+-----------------+     +----------------+     +---------------+
-| Pick & Place    | <-- | 3D Position    | <-- | Object        |
-| with MoveIt     |     | Estimation     |     | Detection     |
-+-----------------+     +----------------+     +---------------+
++----------------+     +---------------+     +----------------+
+| RealSense D435 | --> | Darknet YOLO  | --> | Darknet3D      |
+| Camera         |     | 2D Detection  |     | 3D Localization|
++----------------+     +---------------+     +----------------+
+                                                     |
++----------------+     +---------------+     +----------------+
+| MoveIt         | <-- | Pick & Place  | <-- | Object Pose    |
+| Execution      |     | Planning      |     | Estimation     |
++----------------+     +---------------+     +----------------+
 ```
 
-## 2. Point Cloud Processing
+## 2. Installing Darknet ROS and Darknet3D
 
-### 2.1 Installing Required Packages
+### 2.1 Installing Darknet ROS
 
 ```bash
-sudo apt-get install ros-noetic-pcl-ros ros-noetic-pcl-conversions
-pip install opencv-python numpy
-```
-
-### 2.2 Creating a Point Cloud Filtering Node
-
-Create a file named `point_cloud_filter.py` in your package:
-
-```python
-#!/usr/bin/env python3
-
-import rospy
-import numpy as np
-from sensor_msgs.msg import PointCloud2
-import sensor_msgs.point_cloud2 as pc2
-from pcl_msgs.msg import PointIndices
-import pcl
-import pcl_ros
-
-class PointCloudFilter:
-    def __init__(self):
-        rospy.init_node('point_cloud_filter')
-        
-        # Parameters
-        self.voxel_size = rospy.get_param('~voxel_size', 0.01)  # 1cm voxel
-        self.z_min = rospy.get_param('~z_min', 0.05)  # 5cm above table
-        self.z_max = rospy.get_param('~z_max', 0.5)   # 50cm height limit
-        
-        # Subscribers and Publishers
-        self.cloud_sub = rospy.Subscriber('/camera/depth/color/points', 
-                                         PointCloud2, self.cloud_callback)
-        self.cloud_pub = rospy.Publisher('/filtered_points', 
-                                         PointCloud2, queue_size=1)
-    
-    def cloud_callback(self, cloud_msg):
-        # Convert ROS message to PCL
-        cloud = pcl_ros.point_cloud2.create_cloud_xyz32(cloud_msg.header, 
-            [[p[0], p[1], p[2]] for p in pc2.read_points(cloud_msg)])
-        
-        # Apply voxel grid filter
-        voxel_filter = cloud.make_voxel_grid_filter()
-        voxel_filter.set_leaf_size(self.voxel_size, self.voxel_size, self.voxel_size)
-        cloud_filtered = voxel_filter.filter()
-        
-        # Apply passthrough filter for z height
-        passthrough = cloud_filtered.make_passthrough_filter()
-        passthrough.set_filter_field_name("z")
-        passthrough.set_filter_limits(self.z_min, self.z_max)
-        cloud_filtered = passthrough.filter()
-        
-        # Convert back to ROS message and publish
-        filtered_msg = pcl_ros.point_cloud2.create_cloud_xyz32(
-            cloud_msg.header, cloud_filtered.to_array())
-        self.cloud_pub.publish(filtered_msg)
-
-if __name__ == '__main__':
-    try:
-        filter_node = PointCloudFilter()
-        rospy.spin()
-    except rospy.ROSInterruptException:
-        pass
-```
-
-### 2.3 Segmentation Techniques
-
-We'll use plane segmentation to identify the table surface and cluster extraction to identify objects:
-
-```python
-#!/usr/bin/env python3
-
-import rospy
-import numpy as np
-from sensor_msgs.msg import PointCloud2
-import sensor_msgs.point_cloud2 as pc2
-from pcl_msgs.msg import PointIndices
-import pcl
-import pcl_ros
-from visualization_msgs.msg import Marker, MarkerArray
-
-class PointCloudSegmenter:
-    def __init__(self):
-        rospy.init_node('point_cloud_segmenter')
-        
-        # Parameters
-        self.distance_threshold = rospy.get_param('~distance_threshold', 0.01)
-        self.cluster_tolerance = rospy.get_param('~cluster_tolerance', 0.02)
-        self.min_cluster_size = rospy.get_param('~min_cluster_size', 100)
-        
-        # Subscribers and Publishers
-        self.cloud_sub = rospy.Subscriber('/filtered_points', 
-                                          PointCloud2, self.segmentation_callback)
-        self.clusters_pub = rospy.Publisher('/object_clusters', 
-                                          PointCloud2, queue_size=1)
-        self.markers_pub = rospy.Publisher('/object_markers', 
-                                           MarkerArray, queue_size=1)
-    
-    def segmentation_callback(self, cloud_msg):
-        # Convert ROS message to PCL
-        cloud = pcl_ros.point_cloud2.create_cloud_xyz32(cloud_msg.header, 
-            [[p[0], p[1], p[2]] for p in pc2.read_points(cloud_msg)])
-        
-        # Plane segmentation (to remove table)
-        seg = cloud.make_segmenter_normals(ksearch=50)
-        seg.set_optimize_coefficients(True)
-        seg.set_model_type(pcl.SACMODEL_PLANE)
-        seg.set_normal_distance_weight(0.1)
-        seg.set_method_type(pcl.SAC_RANSAC)
-        seg.set_max_iterations(100)
-        seg.set_distance_threshold(self.distance_threshold)
-        indices, coefficients = seg.segment()
-        
-        # Extract non-plane points
-        cloud_objects = cloud.extract(indices, negative=True)
-        
-        # Cluster extraction
-        tree = cloud_objects.make_kdtree()
-        ec = cloud_objects.make_EuclideanClusterExtraction()
-        ec.set_ClusterTolerance(self.cluster_tolerance)
-        ec.set_MinClusterSize(self.min_cluster_size)
-        ec.set_MaxClusterSize(25000)
-        ec.set_SearchMethod(tree)
-        cluster_indices = ec.Extract()
-        
-        # Publish cluster markers
-        marker_array = MarkerArray()
-        for i, indices in enumerate(cluster_indices):
-            # Extract cluster points
-            points = np.zeros((len(indices), 3), dtype=np.float32)
-            for j, idx in enumerate(indices):
-                points[j] = cloud_objects[idx]
-            
-            # Compute centroid
-            centroid = np.mean(points, axis=0)
-            
-            # Create marker
-            marker = Marker()
-            marker.header = cloud_msg.header
-            marker.ns = "objects"
-            marker.id = i
-            marker.type = Marker.SPHERE
-            marker.action = Marker.ADD
-            marker.pose.position.x = centroid[0]
-            marker.pose.position.y = centroid[1]
-            marker.pose.position.z = centroid[2]
-            marker.pose.orientation.w = 1.0
-            marker.scale.x = 0.05
-            marker.scale.y = 0.05
-            marker.scale.z = 0.05
-            marker.color.r = 1.0
-            marker.color.g = 0.0
-            marker.color.b = 0.0
-            marker.color.a = 0.8
-            marker.lifetime = rospy.Duration(1.0)
-            marker_array.markers.append(marker)
-        
-        self.markers_pub.publish(marker_array)
-
-if __name__ == '__main__':
-    try:
-        segmenter = PointCloudSegmenter()
-        rospy.spin()
-    except rospy.ROSInterruptException:
-        pass
-```
-
-## 3. Object Detection with YOLO
-
-### 3.1 Setting Up YOLO for ROS
-
-First, install the required packages:
-
-```bash
-# Install Darknet ROS
+# Clone darknet_ros repository
 cd ~/kinetibot_ws/src
 git clone --recursive https://github.com/leggedrobotics/darknet_ros.git
 
 # Build the workspace
 cd ~/kinetibot_ws
-catkin_make -DCMAKE_BUILD_TYPE=Release
+catkin_make
 ```
 
-### 3.2 Creating a Custom YOLO Node
+### 2.2 Installing Darknet3D
 
-Create a Python node to process YOLO detections and match them with point cloud clusters:
+```bash
+# Clone darknet3d repository
+cd ~/kinetibot_ws/src
+git clone https://github.com/tom13133/darknet3d.git
 
-```python
-#!/usr/bin/env python3
+# Install dependencies
+sudo apt-get install ros-noetic-jsk-recognition-msgs ros-noetic-jsk-rviz-plugins
 
-import rospy
-import cv2
-import numpy as np
-from cv_bridge import CvBridge
-from sensor_msgs.msg import Image, CameraInfo, PointCloud2
-import sensor_msgs.point_cloud2 as pc2
-from darknet_ros_msgs.msg import BoundingBoxes
-from geometry_msgs.msg import Point, PoseStamped
-import tf2_ros
-import tf2_geometry_msgs
-
-class ObjectDetector:
-    def __init__(self):
-        rospy.init_node('object_detector')
-        self.bridge = CvBridge()
-        
-        # Store the latest data
-        self.latest_rgb = None
-        self.latest_depth = None
-        self.latest_boxes = None
-        self.camera_info = None
-        
-        # TF buffer for transforms
-        self.tf_buffer = tf2_ros.Buffer()
-        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
-        
-        # Subscribe to camera topics
-        self.rgb_sub = rospy.Subscriber('/camera/color/image_raw', 
-                                       Image, self.rgb_callback)
-        self.depth_sub = rospy.Subscriber('/camera/aligned_depth_to_color/image_raw', 
-                                         Image, self.depth_callback)
-        self.info_sub = rospy.Subscriber('/camera/color/camera_info', 
-                                        CameraInfo, self.info_callback)
-        
-        # Subscribe to YOLO detection results
-        self.bbox_sub = rospy.Subscriber('/darknet_ros/bounding_boxes', 
-                                        BoundingBoxes, self.bbox_callback)
-        
-        # Publisher for object poses
-        self.pose_pub = rospy.Publisher('/detected_objects/poses', 
-                                       PoseStamped, queue_size=10)
-                                       
-        rospy.loginfo("Object detector initialized")
-    
-    def rgb_callback(self, msg):
-        self.latest_rgb = self.bridge.imgmsg_to_cv2(msg, "bgr8")
-    
-    def depth_callback(self, msg):
-        self.latest_depth = self.bridge.imgmsg_to_cv2(msg, "16UC1")
-        # Convert to meters
-        self.latest_depth = self.latest_depth.astype(float) / 1000.0
-    
-    def info_callback(self, msg):
-        self.camera_info = msg
-    
-    def bbox_callback(self, msg):
-        if self.latest_rgb is None or self.latest_depth is None or self.camera_info is None:
-            return
-        
-        # Process each detected object
-        for box in msg.bounding_boxes:
-            # Get center of bounding box
-            center_x = (box.xmin + box.xmax) // 2
-            center_y = (box.ymin + box.ymax) // 2
-            
-            # Get depth at center point
-            depth = self.latest_depth[center_y, center_x]
-            
-            # Skip if depth is invalid
-            if depth <= 0 or np.isnan(depth):
-                continue
-            
-            # Convert pixel to 3D point
-            fx = self.camera_info.K[0]
-            fy = self.camera_info.K[4]
-            cx = self.camera_info.K[2]
-            cy = self.camera_info.K[5]
-            
-            # Calculate 3D point in camera frame
-            x = (center_x - cx) * depth / fx
-            y = (center_y - cy) * depth / fy
-            z = depth
-            
-            # Create pose message
-            pose = PoseStamped()
-            pose.header = msg.header
-            pose.pose.position.x = x
-            pose.pose.position.y = y
-            pose.pose.position.z = z
-            pose.pose.orientation.w = 1.0
-            
-            # Transform to base_link frame
-            try:
-                transform = self.tf_buffer.lookup_transform(
-                    'base_link',
-                    msg.header.frame_id,
-                    rospy.Time(0),
-                    rospy.Duration(1.0)
-                )
-                pose_transformed = tf2_geometry_msgs.do_transform_pose(pose, transform)
-                
-                # Publish the transformed pose
-                self.pose_pub.publish(pose_transformed)
-                
-                rospy.loginfo(f"Detected {box.Class} at position: "
-                             f"[{pose_transformed.pose.position.x:.3f}, "
-                             f"{pose_transformed.pose.position.y:.3f}, "
-                             f"{pose_transformed.pose.position.z:.3f}]")
-            except (tf2_ros.LookupException, tf2_ros.ConnectivityException, 
-                    tf2_ros.ExtrapolationException) as e:
-                rospy.logwarn(f"TF Error: {e}")
-
-if __name__ == '__main__':
-    try:
-        detector = ObjectDetector()
-        rospy.spin()
-    except rospy.ROSInterruptException:
-        pass
+# Build the workspace again
+cd ~/kinetibot_ws
+catkin_make
 ```
 
-### 3.3 Configuring YOLO
+## 3. Configuring Darknet and Darknet3D
 
-Create a launch file for the object detection system:
+### 3.1 Create a Launch File for Object Detection
+
+Create a new launch file `perception_pipeline.launch` in your package:
 
 ```xml
 <launch>
-    <!-- Start RealSense camera -->
-    <include file="$(find realsense2_camera)/launch/rs_camera.launch">
-        <arg name="align_depth" value="true"/>
-    </include>
+  <!-- Start RealSense camera -->
+  <include file="$(find realsense2_camera)/launch/rs_camera.launch">
+    <arg name="align_depth" value="true"/>
+    <arg name="color_width" value="640"/>
+    <arg name="color_height" value="480"/>
+    <arg name="depth_width" value="640"/>
+    <arg name="depth_height" value="480"/>
+    <arg name="filters" value="pointcloud"/>
+  </include>
 
-    <!-- Start Darknet ROS with YOLO -->
-    <include file="$(find darknet_ros)/launch/yolo_v4.launch">
-        <arg name="image" value="/camera/color/image_raw"/>
-    </include>
-    
-    <!-- Start point cloud filter -->
-    <node name="point_cloud_filter" pkg="kinetirover_perception" type="point_cloud_filter.py" output="screen">
-        <param name="voxel_size" value="0.01"/>
-        <param name="z_min" value="0.05"/>
-        <param name="z_max" value="0.5"/>
-    </node>
-    
-    <!-- Start point cloud segmenter -->
-    <node name="point_cloud_segmenter" pkg="kinetirover_perception" type="point_cloud_segmenter.py" output="screen">
-        <param name="distance_threshold" value="0.01"/>
-        <param name="cluster_tolerance" value="0.02"/>
-        <param name="min_cluster_size" value="100"/>
-    </node>
-    
-    <!-- Start object detector -->
-    <node name="object_detector" pkg="kinetirover_perception" type="object_detector.py" output="screen"/>
+  <!-- Start Darknet ROS YOLO -->
+  <include file="$(find darknet_ros)/launch/yolo_v4.launch">
+    <arg name="image" value="/camera/color/image_raw"/>
+    <arg name="yolo_model_path" value="$(find darknet_ros)/yolo_network_config/weights"/>
+    <arg name="yolo_config_path" value="$(find darknet_ros)/yolo_network_config/cfg"/>
+  </include>
+
+  <!-- Start Darknet3D -->
+  <node name="darknet3d" pkg="darknet3d" type="darknet3d_node" output="screen">
+    <param name="camera_frame_id" value="camera_color_optical_frame"/>
+    <param name="root_frame_id" value="base_link"/>
+    <param name="input_bbx_topic" value="/darknet_ros/bounding_boxes"/>
+    <param name="input_pc_topic" value="/camera/depth/color/points"/>
+    <param name="detections_topic" value="/darknet3d/detections"/>
+    <param name="visualization_marker_topic" value="/darknet3d/markers"/>
+    <param name="min_probability" value="0.3"/>
+    <param name="min_points" value="10"/>
+  </node>
 </launch>
 ```
 
-## 4. Integrating with MoveIt for Pick-and-Place
+### 3.2 Understanding Darknet3D
 
-### 4.1 Creating a Pick-and-Place Node
+Darknet3D takes the 2D bounding boxes from YOLO detection and the point cloud from the RealSense camera to compute 3D bounding boxes. It outputs:
 
-Now, let's create a node that uses the detected object poses to perform pick-and-place operations with MoveIt:
+1. `jsk_recognition_msgs/BoundingBoxArray` - 3D bounding boxes for detected objects
+2. `visualization_msgs/MarkerArray` - Visualization markers for RViz
+
+## 4. Creating a Pick and Place Node with MoveIt Integration
+
+Let's create a Python node to handle pick and place operations based on the Darknet3D detections:
 
 ```python
 #!/usr/bin/env python3
@@ -398,155 +116,262 @@ import sys
 import moveit_commander
 import moveit_msgs.msg
 import geometry_msgs.msg
+from math import pi
+from std_msgs.msg import String
 from geometry_msgs.msg import PoseStamped, Pose
-from tf.transformations import quaternion_from_euler
+from jsk_recognition_msgs.msg import BoundingBoxArray, BoundingBox
+from tf.transformations import quaternion_from_euler, euler_from_quaternion
 import numpy as np
+import tf2_ros
+import tf2_geometry_msgs
 
 class PickAndPlace:
     def __init__(self):
-        rospy.init_node('pick_and_place')
+        rospy.init_node('darknet3d_pick_place', anonymous=True)
         
         # Initialize MoveIt
         moveit_commander.roscpp_initialize(sys.argv)
+        
+        # Get robot and scene instances
         self.robot = moveit_commander.RobotCommander()
         self.scene = moveit_commander.PlanningSceneInterface()
-        self.group_name = "px100_arm"
-        self.move_group = moveit_commander.MoveGroupCommander(self.group_name)
+        
+        # Setup arm and gripper group commanders
+        self.arm_group = moveit_commander.MoveGroupCommander("px100_arm")
         self.gripper_group = moveit_commander.MoveGroupCommander("px100_gripper")
         
-        # Set parameters
-        self.move_group.set_planning_time(5.0)
-        self.move_group.set_num_planning_attempts(10)
-        self.move_group.set_max_velocity_scaling_factor(0.5)
-        self.move_group.set_max_acceleration_scaling_factor(0.5)
+        # Set planning parameters
+        self.arm_group.set_planning_time(5)
+        self.arm_group.set_num_planning_attempts(10)
+        self.arm_group.set_goal_position_tolerance(0.01)
+        self.arm_group.set_goal_orientation_tolerance(0.05)
         
-        # Add table to the scene
+        # Initialize parameters
+        self.target_object = rospy.get_param('~target_object', 'bottle')
+        self.place_position = rospy.get_param('~place_position', [0.2, 0.2, 0.1])
+        
+        # Initialize TF listener
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
+        
+        # Add a delay to allow initialization
+        rospy.sleep(2)
+        
+        # Add a table to the scene
         self.add_table()
         
-        # Subscribe to detected object poses
-        self.object_pose_sub = rospy.Subscriber('/detected_objects/poses', 
-                                               PoseStamped, self.object_callback)
+        # Subscribe to 3D bounding box topic
+        self.detection_sub = rospy.Subscriber('/darknet3d/detections', 
+                                             BoundingBoxArray, 
+                                             self.detection_callback)
         
-        rospy.loginfo("Pick and place node initialized")
-    
+        rospy.loginfo("Pick and place node initialized. Waiting for object detections...")
+        
     def add_table(self):
         # Add table as a collision object
         table_pose = PoseStamped()
         table_pose.header.frame_id = "base_link"
-        table_pose.pose.position.x = 0.2  # 20cm in front of the robot
+        table_pose.pose.position.x = 0.2
         table_pose.pose.position.y = 0.0
         table_pose.pose.position.z = -0.025  # Half of the table height
         table_pose.pose.orientation.w = 1.0
         
+        # Add the box
         self.scene.add_box("table", table_pose, size=(0.5, 0.5, 0.05))
-        rospy.sleep(1.0)  # Wait for the scene to update
-    
+        rospy.sleep(1)  # Wait for the scene to update
+        
     def open_gripper(self):
-        gripper_joint_values = self.gripper_group.get_current_joint_values()
-        gripper_joint_values[0] = 0.037  # Open position for left_finger
-        self.gripper_group.go(gripper_joint_values, wait=True)
+        # Open the gripper to its max position
+        gripper_joint_goal = self.gripper_group.get_current_joint_values()
+        gripper_joint_goal[0] = 0.037  # Open position for left_finger
+        self.gripper_group.go(gripper_joint_goal, wait=True)
         self.gripper_group.stop()
-    
+        
     def close_gripper(self):
-        gripper_joint_values = self.gripper_group.get_current_joint_values()
-        gripper_joint_values[0] = 0.015  # Closed position for left_finger
-        self.gripper_group.go(gripper_joint_values, wait=True)
+        # Close the gripper to grip an object
+        gripper_joint_goal = self.gripper_group.get_current_joint_values()
+        gripper_joint_goal[0] = 0.015  # Closed position for left_finger
+        self.gripper_group.go(gripper_joint_goal, wait=True)
         self.gripper_group.stop()
-    
+        
     def move_to_home(self):
-        joint_goal = self.move_group.get_current_joint_values()
-        joint_goal[0] = 0.0  # waist
-        joint_goal[1] = 0.0  # shoulder
-        joint_goal[2] = 0.0  # elbow
-        joint_goal[3] = 0.0  # wrist
+        # Move the arm to the home position
+        joint_goal = self.arm_group.get_current_joint_values()
+        joint_goal[0] = 0  # waist
+        joint_goal[1] = 0  # shoulder
+        joint_goal[2] = 0  # elbow
+        joint_goal[3] = 0  # wrist
         
-        self.move_group.go(joint_goal, wait=True)
-        self.move_group.stop()
-    
-    def object_callback(self, msg):
-        rospy.loginfo("Received object pose, starting pick and place operation")
+        self.arm_group.go(joint_goal, wait=True)
+        self.arm_group.stop()
         
-        # Move to home position first
+    def detection_callback(self, msg):
+        # Skip if no detections
+        if len(msg.boxes) == 0:
+            return
+        
+        # Find our target object
+        target_box = None
+        for box in msg.boxes:
+            if box.label == self.target_object:
+                target_box = box
+                break
+        
+        if target_box is None:
+            return
+        
+        rospy.loginfo(f"Found target object '{self.target_object}'. Starting pick and place operation.")
+        
+        # Convert the box pose to gripper pose for picking
+        grasp_pose = self.calculate_grasp_pose(target_box)
+        
+        # Execute pick and place
+        self.execute_pick_place(grasp_pose)
+        
+    def calculate_grasp_pose(self, box):
+        # Create a pose for grasping the object
+        grasp_pose = PoseStamped()
+        grasp_pose.header = box.header
+        
+        # Position slightly above the center of the box
+        grasp_pose.pose.position.x = box.pose.position.x
+        grasp_pose.pose.position.y = box.pose.position.y
+        grasp_pose.pose.position.z = box.pose.position.z + box.dimensions.z/2 + 0.05  # Add offset for approach
+        
+        # Orientation for top-down grasp
+        q = quaternion_from_euler(0, pi/2, 0)  # Roll, Pitch, Yaw
+        grasp_pose.pose.orientation.x = q[0]
+        grasp_pose.pose.orientation.y = q[1]
+        grasp_pose.pose.orientation.z = q[2]
+        grasp_pose.pose.orientation.w = q[3]
+        
+        # Transform to base_link frame if needed
+        if grasp_pose.header.frame_id != "base_link":
+            try:
+                transform = self.tf_buffer.lookup_transform(
+                    "base_link",
+                    grasp_pose.header.frame_id,
+                    rospy.Time(0),
+                    rospy.Duration(1.0)
+                )
+                grasp_pose = tf2_geometry_msgs.do_transform_pose(grasp_pose, transform)
+                grasp_pose.header.frame_id = "base_link"
+            except (tf2_ros.LookupException, tf2_ros.ConnectivityException, 
+                    tf2_ros.ExtrapolationException) as e:
+                rospy.logwarn(f"TF Error: {e}")
+                return None
+        
+        return grasp_pose
+        
+    def execute_pick_place(self, grasp_pose):
+        if grasp_pose is None:
+            rospy.logerr("Invalid grasp pose. Aborting pick and place.")
+            return
+        
+        # Move to home position
         self.move_to_home()
         
         # Open gripper
         self.open_gripper()
         
-        # Pre-grasp pose (slightly above the object)
-        pre_grasp_pose = geometry_msgs.msg.Pose()
-        pre_grasp_pose.position.x = msg.pose.position.x
-        pre_grasp_pose.position.y = msg.pose.position.y
-        pre_grasp_pose.position.z = msg.pose.position.z + 0.1  # 10cm above object
+        # Approach from above
+        approach_pose = grasp_pose
+        approach_pose.pose.position.z += 0.1  # 10cm above grasp position
         
-        # Set orientation for top-down grasp
-        q = quaternion_from_euler(0, np.pi/2, 0)  # Roll, Pitch, Yaw
-        pre_grasp_pose.orientation.x = q[0]
-        pre_grasp_pose.orientation.y = q[1]
-        pre_grasp_pose.orientation.z = q[2]
-        pre_grasp_pose.orientation.w = q[3]
-        
-        # Move to pre-grasp pose
-        self.move_group.set_pose_target(pre_grasp_pose)
-        success = self.move_group.go(wait=True)
-        self.move_group.stop()
-        self.move_group.clear_pose_targets()
+        # Plan and execute approach
+        self.arm_group.set_pose_target(approach_pose)
+        success = self.arm_group.go(wait=True)
+        self.arm_group.stop()
+        self.arm_group.clear_pose_targets()
         
         if not success:
-            rospy.logwarn("Failed to reach pre-grasp pose")
+            rospy.logerr("Failed to reach approach position. Aborting pick and place.")
             return
         
-        # Approach object
-        grasp_pose = geometry_msgs.msg.Pose()
-        grasp_pose.position.x = msg.pose.position.x
-        grasp_pose.position.y = msg.pose.position.y
-        grasp_pose.position.z = msg.pose.position.z + 0.02  # Slight offset to avoid collision
-        grasp_pose.orientation = pre_grasp_pose.orientation
-        
-        # Use Cartesian path for approach
+        # Plan cartesian path to grasp position
         waypoints = []
-        waypoints.append(grasp_pose)
+        waypoints.append(grasp_pose.pose)  # Move down to grasp
         
-        (plan, fraction) = self.move_group.compute_cartesian_path(
-            waypoints,   # waypoints to follow
-            0.01,        # eef_step
-            0.0          # jump_threshold
-        )
+        (plan, fraction) = self.arm_group.compute_cartesian_path(
+            waypoints,  # waypoints to follow
+            0.01,       # eef_step
+            0.0)        # jump_threshold
         
         if fraction < 0.9:
-            rospy.logwarn(f"Only achieved {fraction:.2f} of approach path")
+            rospy.logwarn(f"Only achieved {fraction:.2f} of Cartesian path. Aborting.")
+            self.move_to_home()
+            return
         
-        self.move_group.execute(plan, wait=True)
+        # Execute cartesian path
+        self.arm_group.execute(plan, wait=True)
         
         # Close gripper to grasp object
         self.close_gripper()
         rospy.sleep(0.5)  # Wait for gripper to close
         
-        # Move to place position
-        place_pose = geometry_msgs.msg.Pose()
-        place_pose.position.x = 0.2
-        place_pose.position.y = -0.2  # 20cm to the left
-        place_pose.position.z = 0.1
-        place_pose.orientation = pre_grasp_pose.orientation
+        # Lift object
+        lift_pose = grasp_pose
+        lift_pose.pose.position.z += 0.1  # 10cm above grasp position
         
-        self.move_group.set_pose_target(place_pose)
-        success = self.move_group.go(wait=True)
-        self.move_group.stop()
-        self.move_group.clear_pose_targets()
+        self.arm_group.set_pose_target(lift_pose)
+        success = self.arm_group.go(wait=True)
+        self.arm_group.stop()
+        self.arm_group.clear_pose_targets()
         
         if not success:
-            rospy.logwarn("Failed to reach place pose")
-            # Try to recover by moving home
+            rospy.logerr("Failed to lift object. Aborting pick and place.")
+            return
+        
+        # Create place pose
+        place_pose = PoseStamped()
+        place_pose.header.frame_id = "base_link"
+        place_pose.pose.position.x = self.place_position[0]
+        place_pose.pose.position.y = self.place_position[1]
+        place_pose.pose.position.z = self.place_position[2] + 0.1  # Add some height
+        place_pose.pose.orientation = lift_pose.pose.orientation  # Keep same orientation
+        
+        # Move to place position
+        self.arm_group.set_pose_target(place_pose)
+        success = self.arm_group.go(wait=True)
+        self.arm_group.stop()
+        self.arm_group.clear_pose_targets()
+        
+        if not success:
+            rospy.logerr("Failed to reach place position. Returning to home.")
             self.move_to_home()
             return
+        
+        # Lower object to surface
+        place_down_pose = place_pose
+        place_down_pose.pose.position.z = self.place_position[2]
+        
+        waypoints = []
+        waypoints.append(place_down_pose.pose)
+        
+        (plan, fraction) = self.arm_group.compute_cartesian_path(
+            waypoints,  # waypoints to follow
+            0.01,       # eef_step
+            0.0)        # jump_threshold
+        
+        self.arm_group.execute(plan, wait=True)
         
         # Open gripper to release object
         self.open_gripper()
         rospy.sleep(0.5)  # Wait for gripper to open
         
-        # Move back to home position
+        # Move away
+        retreat_pose = place_down_pose
+        retreat_pose.pose.position.z += 0.1  # Move up 10cm
+        
+        self.arm_group.set_pose_target(retreat_pose)
+        self.arm_group.go(wait=True)
+        self.arm_group.stop()
+        self.arm_group.clear_pose_targets()
+        
+        # Return to home position
         self.move_to_home()
         
-        rospy.loginfo("Pick and place operation completed")
+        rospy.loginfo("Pick and place operation completed successfully!")
 
 if __name__ == '__main__':
     try:
@@ -556,99 +381,166 @@ if __name__ == '__main__':
         pass
 ```
 
-### 4.2 Launch File for Pick-and-Place
+## 5. Creating a Launch File for Pick and Place
+
+Create a launch file `pick_place.launch` to run the complete system:
 
 ```xml
 <launch>
-    <!-- Start MoveIt -->
-    <include file="$(find px100_moveit)/launch/px100_moveit.launch">
-        <arg name="use_actual" value="true"/>
-    </include>
-    
-    <!-- Start perception pipeline -->
-    <include file="$(find kinetirover_perception)/launch/perception.launch"/>
-    
-    <!-- Start pick and place node -->
-    <node name="pick_and_place" pkg="kinetirover_manipulation" type="pick_and_place.py" output="screen"/>
+  <!-- Start the perception system -->
+  <include file="$(find kinetirover_perception)/launch/perception_pipeline.launch"/>
+  
+  <!-- Start MoveIt -->
+  <include file="$(find px100_moveit)/launch/px100_moveit.launch">
+    <arg name="use_actual" value="true"/>
+  </include>
+  
+  <!-- Start the pick and place node -->
+  <node name="pick_place_node" pkg="kinetirover_manipulation" type="darknet3d_pick_place.py" output="screen">
+    <param name="target_object" value="bottle"/>
+    <param name="place_position" value="[0.2, 0.2, 0.1]"/>
+  </node>
+  
+  <!-- Start RViz with custom config -->
+  <node name="rviz" pkg="rviz" type="rviz" args="-d $(find kinetirover_manipulation)/config/pick_place.rviz"/>
 </launch>
 ```
 
-## 5. Calibration and Testing
+## 6. Creating an RViz Configuration
 
-### 5.1 Camera-Robot Calibration
+To help visualize the perception pipeline, create an RViz configuration with the following displays:
 
-For accurate pick and place, the camera needs to be properly calibrated with the robot's coordinate system:
+1. RobotModel - to show the PX100 arm
+2. TF - to visualize coordinate frames
+3. Camera (RGB) - to show the camera view with YOLO detections
+4. PointCloud2 - to visualize the point cloud data
+5. BoundingBoxArray - to show the 3D bounding boxes from Darknet3D
+6. MarkerArray - to visualize detected objects
+7. PlanningScene - to show collision objects and planned trajectories
 
-1. Use an ArUco marker on the robot's gripper
-2. Move the robot to several known positions
-3. Calculate the transform between camera and robot base frames
+## 7. Training Custom YOLO Models
 
-### 5.2 Testing the Pipeline
+To improve detection for specific objects, you may want to train a custom YOLO model:
 
-To test the perception pipeline:
+### 7.1 Data Collection
 
-1. Launch the perception system:
+1. Collect 100-1000 images per object class
+2. Include various angles, lighting conditions, and backgrounds
+3. Use data augmentation to increase dataset variety
+
+### 7.2 Annotation
+
+1. Use LabelImg or a similar tool to annotate bounding boxes
+2. Export annotations in YOLO format (classes, coordinates)
+
+### 7.3 Training
+
+```bash
+# Clone Darknet repository
+git clone https://github.com/AlexeyAB/darknet.git
+cd darknet
+
+# Modify Makefile to enable GPU, CUDNN, OPENCV
+# Set GPU=1, CUDNN=1, OPENCV=1
+
+# Compile
+make
+
+# Download pre-trained weights
+wget https://github.com/AlexeyAB/darknet/releases/download/darknet_yolo_v4_pre/yolov4.conv.137
+
+# Configure training files
+# - Create obj.names with class names
+# - Create obj.data with paths and class count
+# - Create yolov4-custom.cfg (modify from yolov4-custom.cfg)
+# - Create train.txt and valid.txt with image paths
+
+# Start training
+./darknet detector train data/obj.data cfg/yolov4-custom.cfg yolov4.conv.137 -map
+```
+
+### 7.4 Converting Model for darknet_ros
+
+1. Copy your trained weights file to `darknet_ros/yolo_network_config/weights/`
+2. Copy your custom config file to `darknet_ros/yolo_network_config/cfg/`
+3. Update your `obj.names` file to `darknet_ros/yolo_network_config/coco.names`
+4. Modify `darknet_ros/config/ros.yaml` to use your custom files
+
+## 8. Testing the Perception Pipeline
+
+### 8.1 Setup Test Scene
+
+1. Position the RealSense camera to view the workspace
+2. Place objects from your trained classes on the table
+3. Ensure proper lighting for optimal detection
+
+### 8.2 Run the System
+
+```bash
+# In one terminal, launch the perception pipeline
+roslaunch kinetirover_perception perception_pipeline.launch
+
+# In another terminal, monitor detections
+rostopic echo /darknet3d/detections
+
+# Once confirmed working, run the pick and place demo
+roslaunch kinetirover_manipulation pick_place.launch
+```
+
+### 8.3 Monitoring and Debugging
+
+1. Check if 2D detections are working:
    ```bash
-   roslaunch kinetirover_perception perception.launch
+   rostopic echo /darknet_ros/bounding_boxes
    ```
 
-2. Place objects in the robot's workspace
-
-3. Visualize the detection results in RViz:
-   - Add a Camera display for the RGB image
-   - Add a PointCloud2 display for the filtered points
-   - Add a MarkerArray display for the detected objects
-
-4. Launch the pick-and-place demo:
+2. Check if 3D bounding boxes are generated:
    ```bash
-   roslaunch kinetirover_manipulation pick_place_demo.launch
+   rostopic echo /darknet3d/detections
    ```
 
-## 6. Troubleshooting
+3. Watch RViz for visual confirmation of detections and planned paths
 
-### Common issues and solutions:
+4. Check TF transformations if object positions seem incorrect:
+   ```bash
+   rosrun tf tf_echo base_link camera_color_optical_frame
+   ```
 
-1. **Objects not detected**:
-   - Check that the YOLO model is properly trained for your objects
-   - Ensure proper lighting conditions
-   - Verify camera is properly positioned
+## 9. Troubleshooting
 
-2. **Inaccurate object positions**:
-   - Recalibrate the camera-robot transform
-   - Check for reflective surfaces that may affect depth accuracy
-   - Adjust the point cloud filtering parameters
+### 9.1 Common Issues
 
-3. **Robot fails to grasp objects**:
-   - Ensure gripper size is appropriate for the objects
-   - Check that object positions are within the robot's workspace
-   - Adjust the grasp height offset
+1. **Object detection not working**
+   - Check camera is properly connected
+   - Verify lighting conditions
+   - Ensure YOLO model is properly loaded
 
-## 7. Advanced Topics
+2. **3D localization errors**
+   - Check camera calibration
+   - Verify TF transformations between camera and robot
+   - Adjust min_points and min_probability parameters
 
-### 7.1 Training Custom YOLO Models
+3. **Gripper fails to grasp objects**
+   - Check object size is within gripper capacity
+   - Adjust grasp pose offsets
+   - Verify approach direction
 
-To detect specific objects for your application, you may need to train a custom YOLO model:
+### 9.2 Advanced Debugging
 
-1. Collect images of your objects (at least 100 per class)
-2. Annotate the images with bounding boxes
-3. Train the model using Darknet
-4. Convert the model to use with darknet_ros
+1. Use `rosrun rqt_image_view rqt_image_view` to visualize camera feeds
+2. Use `rqt_tf_tree` to verify TF frame relationships
+3. Inspect point cloud using `pcl_viewer`
 
-### 7.2 Improving Perception Robustness
+## 10. Performance Optimization
 
-- Use temporal filtering to reduce noise in object positions
-- Implement multi-view fusion for better 3D position estimation
-- Add object tracking to maintain persistent object IDs
+1. **Reduce point cloud resolution** to improve processing speed
+2. **Increase min_probability threshold** to filter out low-confidence detections
+3. **Limit detection area** using a region of interest
+4. **Use a lighter YOLO model** (like YOLOv4-tiny) for faster inference
 
 ## Conclusion
 
-In this tutorial, we've set up a complete perception pipeline for the KinetiRover, enabling it to:
-1. Process point clouds from the RealSense camera
-2. Detect objects using YOLO
-3. Estimate 3D positions of objects
-4. Perform pick-and-place operations with MoveIt
-
-This perception system can be extended for various applications such as sorting objects, assembly tasks, or collaborative robot operations.
+In this tutorial, we've implemented a complete perception pipeline using Darknet YOLO for 2D object detection and Darknet3D for 3D localization. We've integrated this with MoveIt to enable pick and place operations with the PX100 robotic arm. The system can be extended with custom object detection models and optimized for specific applications.
 
 ---
 *Previous: [RealSense Setup](realsense-setup.md) | Next: [MoveIt Integration](moveit-setup.md)*
