@@ -7,3 +7,23 @@
 	path = src/vendor/dynamixel-workbench
 	url = https://github.com/ROBOTIS-GIT/dynamixel-workbench.git
 	branch = noetic-devel
+
+[submodule "gb_visual_detection_3d"]
+	path = src/vendor/gb_visual_detection_3d
+	url = https://github.com/IntelligentRoboticsLabs/gb_visual_detection_3d
+	branch = noetic
+
+[submodule "gb_visual_detection_3d_msgs"]
+	path = src/vendor/gb_visual_detection_3d_msgs
+	url = https://github.com/IntelligentRoboticsLabs/gb_visual_detection_3d_msgs
+	branch = melodic
+
+[submodule "darknet_ros"]
+	path = src/vendor/darknet_ros
+	url = https://github.com/leggedrobotics/darknet_ros
+	branch = master
+
+[submodule "realsense_gazebo_plugin"]
+	path = src/arm/sim/realsense_gazebo_plugin
+	url = https://github.com/pal-robotics/realsense_gazebo_plugin
+	branch = melodic-devel
