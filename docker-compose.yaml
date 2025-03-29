@@ -1,0 +1,21 @@
+version: '3'
+
+services:
+  kinetirover:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kinetirover:latest
+    container_name: kinetirover_dev
+    network_mode: host
+    privileged: true
+    environment:
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+    volumes:
+      - ./:/workspace/src/KinetiRover
+      - /tmp/.X11-unix:/tmp/.X11-unix #enable gui application
+      - /dev:/dev
+    tty: true
+    stdin_open: true
+    command: tail -f /dev/null

@@ -1,0 +1,54 @@
+# Git-related files
+.git/
+.gitignore
+.gitmodules
+
+# Catkin build artifacts
+build/
+devel/
+install/
+logs/
+.catkin_workspace
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+*.egg-info/
+.eggs/
+.venv/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary and log files
+*.log
+*.tmp
+.DS_Store
+
+# Docker files (no need to include these in the build context)
+.dockerignore
+
+# You likely don't need to send the README to the container
+README.md
+
+# Compiled object files
+*.o
+*.obj
+
+# Libraries
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out

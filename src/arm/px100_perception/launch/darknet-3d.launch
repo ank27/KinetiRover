@@ -1,0 +1,24 @@
+<launch>
+  <arg name="network_param_file"         default="$(find darknet_ros)/config/yolov3.yaml"/>
+  <arg name="camera_rgb_topic" default="/camera/color/image_raw" />
+
+  <!-- Run realsense camera --> 
+  <include file="$(find realsense2_camera)/launch/rs_camera.launch">
+    <arg name="align_depth" value="true"/>
+    <arg name="enable_pointcloud" value="true"/>
+    <arg name="filters" value="pointcloud"/>
+  </include>
+
+  <!-- Use YOLOv3 -->  
+  <!-- Include main launch file -->
+  <include file="$(find darknet_ros_3d)/launch/darknet_ros_3d.launch">
+    <arg name="camera_rgb_topic" value="$(arg camera_rgb_topic)" />
+  </include>
+
+  <!-- Start object detection node -->
+  <node pkg="px100_perception" type="object_detection.py" name="object_detection" output="screen">
+    <param name="camera_rgb_topic" value="$(arg camera_rgb_topic)" />
+    <param name="network_param_file" value="$(find darknet_ros)/config/yolov2-tiny.yaml" />
+  </node>
+
+</launch>

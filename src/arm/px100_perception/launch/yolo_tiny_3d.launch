@@ -1,0 +1,23 @@
+<launch>
+    
+  <!-- Run realsense camera -->
+  <include file="$(find realsense2_camera)/launch/rs_camera.launch">
+    <arg name="align_depth" value="true"/>
+    <arg name="color_width" value="640"/>
+    <arg name="color_height" value="480"/>
+    <arg name="depth_width" value="640"/>
+    <arg name="depth_height" value="480"/>
+  </include>
+
+  <!-- Use YOLOv3 -->
+  <arg name="network_param_file"         default="$(find darknet_ros)/config/yolov3.yaml"/>
+  <arg name="image" default="/camera/color/image_raw" />
+
+
+  <!-- Include main launch file -->
+  <include file="$(find darknet_ros)/launch/darknet_ros.launch">
+    <arg name="network_param_file"    value="$(arg network_param_file)"/>
+    <arg name="image" value="$(arg image)" />
+  </include>
+
+</launch>

@@ -129,8 +129,8 @@ Next, we'll create a catkin workspace for the KinetiRover project.
 
 1. Create the workspace directory structure:
 ```bash
-mkdir -p ~/kinetibot_ws/src
-cd ~/kinetibot_ws/
+mkdir -p ~/workspace/src
+cd ~/workspace/
 ```
 
 2. Initialize the workspace:
@@ -140,12 +140,12 @@ catkin_make
 
 3. Source the workspace setup file:
 ```bash
-source ~/kinetibot_ws/devel/setup.bash
+source ~/workspace/devel/setup.bash
 ```
 
 4. Add the workspace to your .bashrc for automatic sourcing:
 ```bash
-echo "source ~/kinetibot_ws/devel/setup.bash" >> ~/.bashrc
+echo "source ~/workspace/devel/setup.bash" >> ~/.bashrc
 source ~/.bashrc
 ```
 
@@ -153,7 +153,7 @@ source ~/.bashrc
 
 1. Navigate to the src directory of your workspace:
 ```bash
-cd ~/kinetibot_ws/src
+cd ~/workspace/src
 ```
 
 2. Clone the KinetiRover repository:
@@ -215,7 +215,7 @@ sudo apt install libpcl-dev libpcl-ros ros-noetic-pcl-ros python3-pcl python3-sk
 With all dependencies installed, let's build the KinetiRover workspace:
 
 ```bash
-cd ~/kinetibot_ws
+cd ~/workspace
 catkin_make
 ```
 

@@ -1,0 +1,18 @@
+<launch>
+ <!-- Start RealSense camera -->
+  <include file="$(find realsense2_camera)/launch/rs_camera.launch">
+    <arg name="align_depth" value="true"/>
+    <arg name="color_width" value="640"/>
+    <arg name="color_height" value="480"/>
+    <arg name="depth_width" value="640"/>
+    <arg name="depth_height" value="480"/>
+    <arg name="filters" value="pointcloud"/>
+  </include>
+
+  <arg name="camera_rgb_topic" default="/camera/color/image_raw" />
+  <!-- Include main launch file -->
+  <include file="$(find darknet_ros_3d)/launch/darknet_ros_3d.launch">
+    <arg name="camera_rgb_topic" value="$(arg camera_rgb_topic)" />
+  </include>
+
+</launch>
