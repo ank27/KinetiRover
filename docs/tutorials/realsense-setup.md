@@ -82,7 +82,7 @@ Here's how to install the RealSense ROS package from source:
 
 ```bash
 # Navigate to your catkin workspace source directory
-cd ~/kinetibot_ws/src
+cd ~/workspace/src
 
 # Clone the RealSense ROS wrapper
 git clone https://github.com/IntelRealSense/realsense-ros.git
@@ -92,7 +92,7 @@ cd realsense-ros/
 git checkout `git tag | sort -V | grep -P "^\d+\.\d+\.\d+$" | tail -1`
 
 # Install dependencies
-cd ~/kinetibot_ws
+cd ~/workspace
 sudo apt-get install ros-noetic-ddynamic-reconfigure -y
 rosdep install --from-paths src --ignore-src -r -y
 
@@ -181,7 +181,7 @@ For more advanced visualization, you can also use a custom launch file that inte
 
 ```bash
 # Create a custom launch file in your package
-roscd kinetibot_perception
+roscd kinetirover_perception
 touch launch/view_pointcloud.launch
 ```
 
@@ -196,14 +196,14 @@ Add the following content to the launch file:
   </include>
   
   <!-- Start RViz with a custom configuration -->
-  <node type="rviz" name="rviz" pkg="rviz" args="-d $(find kinetibot_perception)/rviz/pointcloud_viewer.rviz" />
+  <node type="rviz" name="rviz" pkg="rviz" args="-d $(find kinetirover_perception)/rviz/pointcloud_viewer.rviz" />
 </launch>
 ```
 
 Create a custom RViz configuration that automatically includes the point cloud display:
 
 ```bash
-rosrun rviz rviz -d $(find kinetibot_perception)/rviz/pointcloud_viewer.rviz
+rosrun rviz rviz -d $(find kinetirover_perception)/rviz/pointcloud_viewer.rviz
 ```
 
 Save the configuration to your package's rviz folder.
@@ -265,7 +265,7 @@ roslaunch px100_description px100_description.launch use_rviz:=true
 roslaunch realsense2_camera rs_camera.launch
 
 # Add the calibration transform
-roslaunch kinetibot_perception camera_calibration.launch
+roslaunch kinetirover_perception camera_calibration.launch
 ```
 
 ## Integrated Camera Launch
@@ -286,14 +286,14 @@ For convenience, we can create a single launch file that starts both the camera 
       
   <!-- Start RViz with configuration -->
   <node type="rviz" name="rviz" pkg="rviz" 
-      args="-d $(find kinetibot_perception)/rviz/camera_robot.rviz" />
+      args="-d $(find kinetirover_perception)/rviz/camera_robot.rviz" />
 </launch>
 ```
 
-Save this to `kinetibot_perception/launch/camera_robot.launch` and run with:
+Save this to `kinetirover_perception/launch/camera_robot.launch` and run with:
 
 ```bash
-roslaunch kinetibot_perception camera_robot.launch
+roslaunch kinetirover_perception camera_robot.launch
 ```
 
 ## Common Issues and Troubleshooting
@@ -330,7 +330,7 @@ The RealSense ROS package allows loading custom JSON configuration files to set 
 
 ```bash
 roslaunch realsense2_camera rs_camera.launch \
-    json_file_path:=$(find kinetibot_perception)/config/d435_settings.json
+    json_file_path:=$(find kinetirover_perception)/config/d435_settings.json
 ```
 
 Create a configuration file with the RealSense Viewer and save it to your project.
